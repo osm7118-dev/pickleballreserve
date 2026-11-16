@@ -15,22 +15,31 @@ const schema = z.object({
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl;
+  const go = (path: string) => NextResponse.redirect(new URL(path, url));
   const parsed = schema.safeParse(Object.fromEntries(url.searchParams));
-  if (!parsed.success) return NextResponse.redirect(new URL("/bookings", url));
+  if (!parsed.success) return go("/bookings");
   const user = await getCurrentUser();
-  if (!user) return NextResponse.redirect(new URL("/login", url));
+  if (!user) return go("/login");
 
   try {
     const res = await approvePayment({ ...parsed.data, userId: user.id });
-    return NextResponse.redirect(new URL(`/bookings/${res.bookingId}/done`, url));
+    if (res.kind === "booking") return go(`/bookings/${res.bookingId}/done`);
+    if (res.kind === "open_play") return go(`/open-play/${res.sessionId}?joined=1`);
+    return go(`/lessons/${res.lessonId}?paid=1`);
   } catch (e) {
     if (!(e instanceof BookingError)) throw e;
-    const payment = await db.payment.findUnique({ where: { orderId: parsed.data.orderId }, include: { booking: true } });
-    const b = payment?.booking;
-    if (!b || b.userId !== user.id) return NextResponse.redirect(new URL("/bookings", url));
-    if (e.code === "HOLD_EXPIRED") {
-      return NextResponse.redirect(new URL(`/facilities/${b.facilityId}?date=${kstDateStr(b.startAt)}&notice=expired`, url));
+    const p = await db.payment.findUnique({
+      where: { orderId: parsed.data.orderId },
+      include: { booking: true, participant: true, lessonBooking: true },
+    });
+    if (!p || p.userId !== user.id) return go("/bookings");
+    if (p.participant) return go(`/open-play/${p.participant.sessionId}?error=${e.code}`);
+    if (p.lessonBooking) {
+      if (e.code === "HOLD_EXPIRED") return go(`/coaches/${p.lessonBooking.coachId}?notice=expired`);
+      return go(`/lessons/${p.lessonBooking.id}/pay?error=${e.code}`);
     }
-    return NextResponse.redirect(new URL(`/bookings/${b.id}/pay?error=${e.code}`, url));
+    const b = p.booking!;
+    if (e.code === "HOLD_EXPIRED") return go(`/facilities/${b.facilityId}?date=${kstDateStr(b.startAt)}&notice=expired`);
+    return go(`/bookings/${b.id}/pay?error=${e.code}`);
   }
 }

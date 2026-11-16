@@ -92,8 +92,184 @@ async function main() {
     },
   });
 
+  await seedSecondFacility();
+  await seedCoaches();
+  await seedAnnouncements();
   await seedSampleBookings();
+  await seedOpenPlay();
   console.log("Seeded facility:", FACILITY_ID);
+}
+
+const GANGNAM_ID = "seed-facility-gangnam";
+
+// "다른 매장 보기"용 두 번째 시설 (운영자 계정 없음)
+async function seedSecondFacility() {
+  await db.facility.upsert({
+    where: { id: GANGNAM_ID },
+    update: {},
+    create: {
+      id: GANGNAM_ID,
+      name: "강남 피클볼 라운지",
+      address: "서울 강남구 테헤란로 00",
+      regionSido: "서울",
+      regionSigungu: "강남구",
+      phone: "0200000001",
+      description: "개발용 샘플 시설입니다.",
+      amenities: ["주차", "라켓 대여"],
+      status: "approved",
+      approvedAt: new Date(),
+      approvedById: ADMIN_ID,
+      courts: { create: ["1코트", "2코트", "3코트"].map((name, i) => ({ name, surface: "하드", sortOrder: i })) },
+      operatingHours: {
+        create: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, openMinute: h(6), closeMinute: h(24) })),
+      },
+      priceRules: {
+        create: [
+          { dayType: "weekday" as DayType, startMinute: h(6), endMinute: h(18), pricePer30min: 12000 },
+          { dayType: "weekday" as DayType, startMinute: h(18), endMinute: h(24), pricePer30min: 18000 },
+          { dayType: "weekend" as DayType, startMinute: h(6), endMinute: h(24), pricePer30min: 18000 },
+        ],
+      },
+      bookingPolicy: { create: {} },
+      cancellationTiers: {
+        create: [
+          { hoursBefore: 48, refundPercent: 100 },
+          { hoursBefore: 24, refundPercent: 50 },
+          { hoursBefore: 0, refundPercent: 0 },
+        ],
+      },
+    },
+  });
+}
+
+// 개인 레슨 코치와 요일별 가능 시간
+async function seedCoaches() {
+  const coaches = [
+    {
+      id: "seed-coach-kim",
+      facilityId: FACILITY_ID,
+      name: "김하늘 코치",
+      bio: "입문·초급 전문. 그립과 서브부터 차근차근 알려 드려요.",
+      lessonMinutes: 60,
+      lessonPrice: 60000,
+      days: [1, 2, 3, 4, 5],
+      start: h(10),
+      end: h(18),
+    },
+    {
+      id: "seed-coach-lee",
+      facilityId: FACILITY_ID,
+      name: "이준호 코치",
+      bio: "중급 이상. 드롭샷·리셋과 복식 전술 위주로 진행해요.",
+      lessonMinutes: 60,
+      lessonPrice: 80000,
+      days: [2, 4, 6, 0],
+      start: h(18),
+      end: h(22),
+    },
+    {
+      id: "seed-coach-park",
+      facilityId: GANGNAM_ID,
+      name: "박소연 코치",
+      bio: "주말 입문 레슨을 진행해요.",
+      lessonMinutes: 60,
+      lessonPrice: 70000,
+      days: [0, 6],
+      start: h(9),
+      end: h(13),
+    },
+  ];
+  for (const [i, c] of coaches.entries()) {
+    await db.coach.upsert({
+      where: { id: c.id },
+      update: {},
+      create: {
+        id: c.id,
+        facilityId: c.facilityId,
+        name: c.name,
+        bio: c.bio,
+        lessonMinutes: c.lessonMinutes,
+        lessonPrice: c.lessonPrice,
+        sortOrder: i,
+        availabilities: { create: c.days.map((weekday) => ({ weekday, startMinute: c.start, endMinute: c.end })) },
+      },
+    });
+  }
+}
+
+async function seedAnnouncements() {
+  const items = [
+    {
+      id: "seed-notice-1",
+      facilityId: FACILITY_ID,
+      title: "12월 첫 주말 친선 대회 참가 신청",
+      body: "12월 6일(토) 오후 2시부터 복식 친선 대회를 엽니다. 레벨 무관, 선착순 16팀이에요. 프론트에서 신청해 주세요.",
+      isUrgent: true,
+    },
+    {
+      id: "seed-notice-2",
+      facilityId: FACILITY_ID,
+      title: "C코트 바닥 보수 안내",
+      body: "11월 25일(화) 오전 7~10시 C코트 바닥 보수가 있어요. 해당 시간은 예약을 받지 않습니다.",
+      isUrgent: false,
+    },
+    {
+      id: "seed-notice-3",
+      facilityId: GANGNAM_ID,
+      title: "평일 아침 할인 오픈",
+      body: "평일 오전 6~9시 이용 시 음료 1잔을 드려요.",
+      isUrgent: false,
+    },
+  ];
+  for (const n of items) {
+    await db.announcement.upsert({ where: { id: n.id }, update: {}, create: n });
+  }
+}
+
+// 오픈플레이 세션: 코트마다 booking(source=open_play) 1건으로 코트를 잡는다. 세션이 하나도 없을 때만.
+async function seedOpenPlay() {
+  if ((await db.openPlaySession.count({ where: { facilityId: FACILITY_ID } })) > 0) return;
+  const courts = await db.court.findMany({ where: { facilityId: FACILITY_ID }, orderBy: { sortOrder: "asc" } });
+  const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const at = (dayOffset: number, minute: number) =>
+    new Date(new Date(`${todayKst}T00:00:00+09:00`).getTime() + dayOffset * 86400_000 + minute * 60_000);
+  const sessions = [
+    { day: 1, start: h(10), end: h(12), title: "오전 오픈플레이 (초급)", capacity: 12, fee: 10000, courts: [2, 3] },
+    { day: 2, start: h(20), end: h(22), title: "나이트 오픈플레이 (중급)", capacity: 8, fee: 15000, courts: [3] },
+    { day: 4, start: h(9), end: h(11), title: "모닝 오픈플레이 (전 레벨)", capacity: 16, fee: 12000, courts: [0, 1] },
+  ];
+  for (const s of sessions) {
+    const startAt = at(s.day, s.start);
+    const endAt = at(s.day, s.end);
+    const courtIds = s.courts.map((i) => courts[i].id);
+    const slots: Date[] = [];
+    for (let t = startAt.getTime(); t < endAt.getTime(); t += 30 * 60_000) slots.push(new Date(t));
+    try {
+      await db.$transaction(async (tx) => {
+        const session = await tx.openPlaySession.create({
+          data: { facilityId: FACILITY_ID, courtIds, title: s.title, startAt, endAt, capacity: s.capacity, fee: s.fee },
+        });
+        for (const courtId of courtIds) {
+          await tx.booking.create({
+            data: {
+              bookingNo: `PB-OP-${session.id.slice(-6)}-${courtId.slice(-4)}`,
+              facilityId: FACILITY_ID,
+              courtId,
+              startAt,
+              endAt,
+              totalAmount: 0,
+              status: "confirmed",
+              source: "open_play",
+              openPlaySessionId: session.id,
+              slots: { create: slots.map((slotStart) => ({ courtId, slotStart })) },
+            },
+          });
+        }
+      });
+    } catch (e) {
+      console.warn("skip open play sample (slot taken):", s.title, e instanceof Error ? e.message.split("\n")[0] : e);
+    }
+  }
 }
 
 // 운영자 캘린더가 비어 보이지 않도록 오늘·내일 수동 예약 몇 건. 예약이 하나도 없을 때만 넣는다.

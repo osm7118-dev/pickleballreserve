@@ -97,6 +97,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       <div className="flex flex-wrap gap-4 text-[13px] text-muted">
         <Legend cls="bg-primary" text="앱 예약" />
         <Legend cls="bg-accent border border-accent-line" text="수동 예약" />
+        <Legend cls="bg-ink" text="오픈플레이" />
         <Legend cls="bg-primary-soft border border-primary/30" text="결제 대기" />
         <Legend cls="bg-danger-bg border border-danger/40" text="노쇼" />
         <Legend cls="hatch border border-line-strong" text="차단" />
@@ -171,7 +172,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                           ? "bg-primary-soft text-primary-hover border border-primary/30"
                           : bk.source === "manual"
                             ? "bg-accent text-ink border border-accent-line"
-                            : "bg-primary text-white";
+                            : bk.source === "open_play"
+                              ? "bg-ink text-white"
+                              : "bg-primary text-white";
                     const active = sp.b === bk.id;
                     return (
                       <Link

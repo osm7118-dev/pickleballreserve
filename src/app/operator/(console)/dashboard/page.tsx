@@ -21,7 +21,12 @@ export default async function DashboardPage() {
 
   const [todayBookings, recentCancels, courts, hours, prices, policy, tiers] = await Promise.all([
     db.booking.findMany({
-      where: { facilityId: facility.id, startAt: { gte: dayStart, lt: dayEnd }, status: { in: ["confirmed", "completed", "no_show"] } },
+      where: {
+        facilityId: facility.id,
+        startAt: { gte: dayStart, lt: dayEnd },
+        status: { in: ["confirmed", "completed", "no_show"] },
+        source: { in: ["app", "manual"] },
+      },
       include: { court: true, user: true },
       orderBy: { startAt: "asc" },
     }),

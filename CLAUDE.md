@@ -32,13 +32,13 @@
 docs/
   PRD.md                     # 기준 문서
 prisma/
-  schema.prisma              # PRD 4장 18개 테이블
+  schema.prisma              # PRD 4장 테이블
   migrations/                # UNIQUE/CHECK 등 Prisma가 못 만드는 제약은 SQL 마이그레이션에 직접 작성
   seed.ts                    # 개발용 시설·코트·가격 샘플
 src/
   app/
-    (user)/                  # 이용자 모바일 웹 U01~U12
-    operator/                # 운영자 웹 O01~O11
+    (user)/                  # 이용자 모바일 웹 U01~U17
+    operator/                # 운영자 웹 O01~O13
     admin/                   # 관리자 웹 A01~A05
     api/
       payments/              # 토스 성공/실패 리다이렉트, 승인
@@ -49,6 +49,9 @@ src/
     payment/                 # PaymentGateway 인터페이스, toss.ts, mock.ts
     notification/            # Notifier 인터페이스, alimtalk.ts, console.ts
     refund/                  # cancellation_tiers 기반 환불액 계산
+    open-play/               # 오픈플레이 참가·결제·취소
+    lesson/                  # 개인 레슨 가능 시간·선점·취소
+    club/                    # 내 매장 선택, 홈 "내 예약" 목록
     settlement/
     auth/                    # 세션, 역할(user/admin), facility_staff 권한 확인
   components/                # 공용 UI 컴포넌트
@@ -97,7 +100,7 @@ tests/
 
 한 단계씩 끝내고 다음으로 넘어간다. 각 단계는 별도 PR로 낸다.
 
-1. **DB 스키마** — PRD 4장 18개 테이블을 `schema.prisma`로 옮기고, `booking_slots` 유니크 제약·운영시간 CHECK 제약 마이그레이션, 시드 데이터, docker compose PostgreSQL.
+1. **DB 스키마** — PRD 4장 테이블을 `schema.prisma`로 옮기고, `booking_slots` 유니크 제약·운영시간 CHECK 제약 마이그레이션, 시드 데이터, docker compose PostgreSQL.
 2. **카카오 로그인** — Auth.js 카카오 로그인, U01·U02(휴대폰 번호·약관 동의), 역할/시설 권한 미들웨어, O01 운영자 시작.
 3. **코트 예약** — 슬롯·가격 계산, 예약 규칙 검증 1~7단계, U03~U06 검색→시간표→선점, held 10분 만료 크론, U09·U10 내 예약.
 4. **토스 결제 (Mock 먼저)** — `PaymentGateway` Mock으로 U07·U08 흐름과 확정·취소·부분환불을 먼저 완성하고 테스트한 뒤, 토스 테스트 키로 실제 위젯·승인·취소 API를 붙인다.

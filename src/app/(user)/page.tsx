@@ -1,113 +1,158 @@
-// U03 홈(검색)
+// U03 홈: "내 매장" 중심 — 매장 정보, 회원 카드, 프로그램·오픈플레이 / 코트 예약 / 개인 레슨, 공지, 내 예약, 다른 매장 보기
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { addDays, dateLabel, durationLabel, minuteLabel, rangeLabel, todayKst } from "@/lib/time";
-import { listRegions } from "@/server/booking/search";
+import { formatKst } from "@/lib/time";
+import { resolveHomeFacility } from "@/server/club";
+import { listMyItems } from "@/server/club/my-items";
 import { BottomTabs } from "@/components/bottom-tabs";
+import { MyItemCard } from "@/components/my-item-card";
 import { Badge, btnPrimary } from "@/components/ui";
-import { IconPin } from "@/components/icons";
+import { IconChevron, IconPin } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
-const selectCls =
-  "h-12 w-full appearance-none rounded-[12px] border border-line-strong bg-surface px-3 text-[15px] font-semibold outline-none focus:border-primary";
+const bigBtn =
+  "flex h-16 w-full items-center justify-center rounded-[14px] bg-primary text-[17px] font-bold text-white transition hover:bg-primary-hover";
 
 export default async function HomePage() {
-  const [user, regions] = await Promise.all([getCurrentUser(), listRegions()]);
-  const today = todayKst();
-  const dates = Array.from({ length: 14 }, (_, i) => addDays(today, i));
-  const starts: number[] = [];
-  for (let m = 6 * 60; m <= 23 * 60; m += 30) starts.push(m);
-  const nextBooking = user
-    ? await db.booking.findFirst({
-        where: { userId: user.id, status: "confirmed", startAt: { gt: new Date() } },
-        include: { facility: true, court: true },
-        orderBy: { startAt: "asc" },
-      })
-    : null;
+  const store = await cookies();
+  const user = await getCurrentUser();
+  const facility = await resolveHomeFacility(store.get("pb_club")?.value, user?.id);
+  if (!facility) {
+    return (
+      <main className="px-5 pt-16 text-center text-muted">
+        아직 열린 매장이 없어요.
+        <BottomTabs />
+      </main>
+    );
+  }
+  const now = new Date();
+  const [notices, items, member, clubCount] = await Promise.all([
+    db.announcement.findMany({ where: { facilityId: facility.id }, orderBy: [{ isUrgent: "desc" }, { createdAt: "desc" }], take: 5 }),
+    user ? listMyItems(user.id, "upcoming", now, 3) : Promise.resolve([]),
+    user ? db.facilityCustomer.findUnique({ where: { facilityId_userId: { facilityId: facility.id, userId: user.id } } }) : null,
+    db.facility.count({ where: { status: "approved" } }),
+  ]);
+  const initials = (user?.name ?? "회원").trim().slice(0, 1);
 
   return (
-    <main className="px-5 pt-8 pb-28">
-      <p className="text-[14px] font-semibold text-primary">{user ? `${user.name ?? "회원"}님` : "반가워요"}</p>
-      <h1 className="mt-1 text-[26px] leading-tight font-extrabold">어디서 칠까요?</h1>
-
-      {nextBooking && (
-        <Link href={`/bookings/${nextBooking.id}`} className="card mt-5 block p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-muted">다가오는 예약</span>
-            <Badge tone="accent">D-{Math.max(0, daysBetween(today, nextBooking.startAt))}</Badge>
-          </div>
-          <p className="mt-1 text-[17px] font-bold">
-            {nextBooking.facility.name} · {nextBooking.court.name}
+    <main className="pb-28">
+      <header className="flex items-center gap-3 px-5 pt-7 pb-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-primary">
+          <span className="block h-5 w-5 rounded-full bg-accent" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="truncate text-[21px] leading-tight font-extrabold">{facility.name}</h1>
+          <p className="flex items-center gap-1 text-[14px] text-muted">
+            <IconPin className="h-3.5 w-3.5" /> {facility.regionSido} {facility.regionSigungu}
           </p>
-          <p className="tabular text-[15px] text-muted">{rangeLabel(nextBooking.startAt, nextBooking.endAt)}</p>
-        </Link>
-      )}
-
-      <form action="/search" className="card mt-5 space-y-4 p-5">
-        <label className="block">
-          <span className="mb-1.5 flex items-center gap-1 text-[13px] font-bold text-muted">
-            <IconPin /> 지역
-          </span>
-          <select name="region" className={selectCls} defaultValue={regions[0] ? `${regions[0].sido}|${regions[0].sigungu}` : ""}>
-            {regions.map((r) => (
-              <option key={`${r.sido}|${r.sigungu}`} value={`${r.sido}|${r.sigungu}`}>
-                {r.sido} {r.sigungu}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-[13px] font-bold text-muted">날짜</span>
-          <select name="date" className={selectCls} defaultValue={dates[1]}>
-            {dates.map((d, i) => (
-              <option key={d} value={d}>
-                {dateLabel(d)}
-                {i === 0 ? " · 오늘" : i === 1 ? " · 내일" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1.5 block text-[13px] font-bold text-muted">시작 시간</span>
-            <select name="start" className={`${selectCls} tabular`} defaultValue={19 * 60}>
-              {starts.map((m) => (
-                <option key={m} value={m}>
-                  {minuteLabel(m)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[13px] font-bold text-muted">이용 시간</span>
-            <select name="minutes" className={selectCls} defaultValue={90}>
-              {[60, 90, 120].map((m) => (
-                <option key={m} value={m}>
-                  {durationLabel(m)}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
-        <button className={btnPrimary}>빈 코트 찾기</button>
-      </form>
+      </header>
 
-      {!user && (
-        <p className="mt-5 text-center text-[14px] text-muted">
-          검색은 로그인 없이 할 수 있어요.{" "}
-          <Link href="/login" className="font-bold text-primary">
-            로그인
+      <div className="space-y-6 px-5">
+        {user ? (
+          <Link href="/me" className="card flex items-center gap-4 p-4">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-[17px] font-bold text-white">
+              {initials}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[18px] font-bold">{user.name ?? "회원"}</p>
+              <p className="text-[14px] text-muted">
+                {member && member.visitCount > 0 ? `이용 ${member.visitCount}회 · 일반 회원` : "일일 이용 회원"}
+              </p>
+            </div>
+            <IconChevron className="h-5 w-5 text-muted-2" />
           </Link>
-        </p>
-      )}
+        ) : (
+          <div className="card flex items-center gap-4 p-4">
+            <p className="flex-1 text-[15px] text-muted">로그인하면 예약과 레슨을 한 곳에서 관리할 수 있어요.</p>
+            <Link href="/login" className="inline-flex h-11 shrink-0 items-center rounded-[12px] bg-ink px-4 text-[14px] font-bold text-white">
+              로그인
+            </Link>
+          </div>
+        )}
+
+        <nav className="space-y-3" aria-label="예약 메뉴">
+          <Link href={`/facilities/${facility.id}/programs`} className={bigBtn}>
+            프로그램 · 오픈플레이
+          </Link>
+          <Link href={`/facilities/${facility.id}`} className={bigBtn}>
+            코트 예약
+          </Link>
+          <Link href={`/facilities/${facility.id}/lessons`} className={bigBtn}>
+            개인 레슨
+          </Link>
+        </nav>
+
+        <section>
+          <SectionHead title="공지사항" href={`/facilities/${facility.id}/notices`} />
+          {notices.length === 0 ? (
+            <p className="card p-5 text-[14px] text-muted">새 공지가 없어요.</p>
+          ) : (
+            <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-1">
+              {notices.map((n) => (
+                <Link
+                  key={n.id}
+                  href={`/facilities/${facility.id}/notices#${n.id}`}
+                  className="card flex w-[85%] shrink-0 snap-start flex-col p-5"
+                >
+                  <p className="flex items-center gap-2 text-[17px] font-bold">
+                    {n.isUrgent && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-danger" aria-hidden />}
+                    <span className="truncate">{n.title}</span>
+                  </p>
+                  <p className="mt-2 line-clamp-3 text-[14px] text-muted">{n.body}</p>
+                  <div className="mt-auto flex items-center justify-between pt-3">
+                    <span className="tabular text-[13px] text-muted">{formatKst(n.createdAt, "M월 d일 (EEE) HH:mm")}</span>
+                    {n.isUrgent && <Badge tone="danger">중요</Badge>}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <SectionHead title="내 예약" href="/bookings" />
+          {!user ? (
+            <p className="card p-5 text-[14px] text-muted">로그인하면 예약이 여기에 보여요.</p>
+          ) : items.length === 0 ? (
+            <div className="card p-5 text-center">
+              <p className="text-[14px] text-muted">예정된 예약이 없어요.</p>
+              <Link href={`/facilities/${facility.id}`} className={`${btnPrimary} mt-3 !h-12`}>
+                코트 예약하기
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {items.map((it) => (
+                <MyItemCard key={`${it.kind}-${it.id}`} item={it} now={now} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <Link href="/clubs" className="card flex items-center justify-between p-5">
+          <div>
+            <p className="text-[17px] font-bold">다른 매장 보기</p>
+            <p className="text-[14px] text-muted">예약 가능한 매장 {clubCount}곳 · 시간으로 빈 코트 찾기</p>
+          </div>
+          <IconChevron className="h-5 w-5 text-muted-2" />
+        </Link>
+      </div>
       <BottomTabs />
     </main>
   );
 }
 
-function daysBetween(today: string, startAt: Date): number {
-  const t = new Date(`${today}T00:00:00+09:00`).getTime();
-  return Math.floor((startAt.getTime() - t) / 86400000);
+function SectionHead({ title, href }: { title: string; href: string }) {
+  return (
+    <div className="mb-3 flex items-center justify-between">
+      <h2 className="text-[20px] font-extrabold">{title}</h2>
+      <Link href={href} className="flex items-center text-[14px] font-semibold text-muted">
+        전체 보기 <IconChevron className="h-4 w-4" />
+      </Link>
+    </div>
+  );
 }

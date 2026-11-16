@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -11,6 +12,8 @@ import { BookingError } from "@/server/booking/errors";
 import { holdBooking } from "@/server/booking/hold";
 import { cancelByUser } from "@/server/booking/manage";
 import { startPayment } from "@/server/payment/service";
+import { cancelOpenPlayByUser, startOpenPlayPayment } from "@/server/open-play";
+import { cancelLessonByUser, holdLesson, startLessonPayment } from "@/server/lesson";
 import { MOCK_METHODS, mockPaymentKey } from "@/server/payment/mock";
 
 // 카카오 연동 전 테스트 계정 (prisma/seed.ts)
@@ -91,10 +94,14 @@ export async function holdAction(_prev: FormState, formData: FormData): Promise<
   redirect(`/bookings/${bookingId}/confirm`);
 }
 
-const paySchema = z.object({ bookingId: z.string().min(1), method: z.enum(MOCK_METHODS) });
+const paySchema = z.object({
+  kind: z.enum(["booking", "open_play", "lesson"]).default("booking"),
+  targetId: z.string().min(1),
+  method: z.enum(MOCK_METHODS),
+});
 
 /**
- * U07 결제하기. Mock 결제위젯 역할: 결제 건(order_id)을 만들고
+ * U07 결제하기 (코트 예약 / 오픈플레이 참가 / 레슨 공통). Mock 결제위젯 역할: 결제 건(order_id)을 만들고
  * 토스와 같은 모양의 성공 리다이렉트(/api/payments/success)로 보낸다. 승인은 그 라우트에서 서버가 한다.
  */
 export async function payAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -102,11 +109,18 @@ export async function payAction(_prev: FormState, formData: FormData): Promise<F
   if (!parsed.success) return { error: "결제수단을 골라 주세요." };
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (!user.phone) redirect("/signup");
+  const { kind, targetId, method } = parsed.data;
   try {
-    const payment = await startPayment({ bookingId: parsed.data.bookingId, userId: user.id });
+    const payment =
+      kind === "booking"
+        ? await startPayment({ bookingId: targetId, userId: user.id })
+        : kind === "open_play"
+          ? await startOpenPlayPayment({ sessionId: targetId, userId: user.id })
+          : await startLessonPayment({ lessonId: targetId, userId: user.id });
     const qs = new URLSearchParams({
       orderId: payment.orderId,
-      paymentKey: mockPaymentKey(parsed.data.method),
+      paymentKey: mockPaymentKey(method),
       amount: String(payment.amount),
     });
     // 토스 위젯처럼 브라우저 전체 이동으로 성공 URL 에 간다 (라우트 핸들러는 클라이언트 라우터로 열 수 없다).
@@ -129,4 +143,68 @@ export async function cancelAction(_prev: FormState, formData: FormData): Promis
     throw e;
   }
   redirect(`/bookings/${bookingId}?cancelled=1`);
+}
+
+/** 다른 매장 보기 → "이 매장으로" : 홈에 보여 줄 매장을 바꾼다 */
+export async function selectClubAction(formData: FormData) {
+  const facilityId = z.string().min(1).parse(formData.get("facilityId"));
+  const facility = await db.facility.findFirst({ where: { id: facilityId, status: "approved" } });
+  if (facility) {
+    const store = await cookies();
+    store.set("pb_club", facility.id, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 365 * 24 * 3600 });
+  }
+  redirect("/");
+}
+
+/** U11 오픈플레이 참가 취소 */
+export async function cancelOpenPlayAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const sessionId = z.string().min(1).parse(formData.get("sessionId"));
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  try {
+    await cancelOpenPlayByUser({ sessionId, userId: user.id });
+  } catch (e) {
+    if (e instanceof BookingError) return { error: e.message };
+    throw e;
+  }
+  redirect(`/open-play/${sessionId}?cancelled=1`);
+}
+
+const lessonHoldSchema = z.object({
+  coachId: z.string().min(1),
+  date: z.string().refine(isDateStr),
+  start: z.coerce.number().int(),
+});
+
+/** 레슨 시간 선택 → 선점 */
+export async function holdLessonAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = lessonHoldSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "시간을 골라 주세요." };
+  const { coachId, date, start } = parsed.data;
+  const back = `/coaches/${coachId}?date=${date}&start=${start}`;
+  const user = await getCurrentUser();
+  if (!user) redirect(`/login?next=${encodeURIComponent(back)}`);
+  if (!user.phone) redirect(`/signup?next=${encodeURIComponent(back)}`);
+  let lessonId: string;
+  try {
+    lessonId = (await holdLesson({ userId: user.id, coachId, date, startMinute: start })).id;
+  } catch (e) {
+    if (e instanceof BookingError) return { error: e.message };
+    throw e;
+  }
+  redirect(`/lessons/${lessonId}/pay`);
+}
+
+/** 레슨 취소 */
+export async function cancelLessonAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const lessonId = z.string().min(1).parse(formData.get("bookingId"));
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  try {
+    await cancelLessonByUser({ lessonId, userId: user.id });
+  } catch (e) {
+    if (e instanceof BookingError) return { error: e.message };
+    throw e;
+  }
+  redirect(`/lessons/${lessonId}?cancelled=1`);
 }
