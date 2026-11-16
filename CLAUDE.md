@@ -115,6 +115,8 @@ pnpm dev                       # 개발 서버
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
+- 카카오 연동 전 로그인은 `DEMO_LOGIN=on`일 때 나오는 테스트 계정(시드의 `seed-user-customer`, `seed-user-owner`)으로 한다. 서명 쿠키 세션(`src/server/auth/token.ts`)이고, 빌드 2단계에서 Auth.js 카카오로 바꾼다.
+- Vercel 배포는 `pnpm vercel-build`(`scripts/vercel-build.sh`: migrate deploy → seed → next build)를 쓴다. README "Vercel 배포" 참고.
 - `pnpm test`는 `DATABASE_URL_TEST`(이름에 `test`가 들어간 DB만 허용)를 매번 비우고 마이그레이션한 뒤 Vitest를 돌린다. 개발 DB는 건드리지 않는다.
 - CHECK/EXCLUDE 같은 제약은 Prisma 스키마로 표현할 수 없으므로 `prisma migrate dev --create-only`로 빈 마이그레이션을 만든 뒤 SQL을 직접 쓴다. 기존 예: `prisma/migrations/*_constraints/migration.sql`.
 - 하루 중 시각(운영시간·가격 시간대)은 자정부터의 분(`open_minute` 등, 0~1440)으로 저장한다. 날짜가 있는 시각만 `timestamptz`다.

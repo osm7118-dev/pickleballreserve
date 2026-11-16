@@ -8,6 +8,7 @@ const db = new PrismaClient();
 const FACILITY_ID = "seed-facility-seongsu";
 const OWNER_ID = "seed-user-owner";
 const ADMIN_ID = "seed-user-admin";
+const CUSTOMER_ID = "seed-user-customer";
 
 const h = (hour: number, minute = 0) => hour * 60 + minute;
 
@@ -21,6 +22,13 @@ async function main() {
     where: { id: OWNER_ID },
     update: {},
     create: { id: OWNER_ID, kakaoId: "seed-kakao-owner", name: "성수 피클볼 사장님", phone: "01000000000" },
+  });
+
+  // 테스트 고객: 휴대폰 번호가 비어 있어 첫 로그인 때 U02(추가 정보·약관)를 거친다.
+  await db.user.upsert({
+    where: { id: CUSTOMER_ID },
+    update: {},
+    create: { id: CUSTOMER_ID, kakaoId: "seed-kakao-customer", name: "테스트 고객" },
   });
 
   await db.facility.upsert({
@@ -84,7 +92,45 @@ async function main() {
     },
   });
 
+  await seedSampleBookings();
   console.log("Seeded facility:", FACILITY_ID);
+}
+
+// 운영자 캘린더가 비어 보이지 않도록 오늘·내일 수동 예약 몇 건. 예약이 하나도 없을 때만 넣는다.
+async function seedSampleBookings() {
+  if ((await db.booking.count({ where: { facilityId: FACILITY_ID } })) > 0) return;
+  const courts = await db.court.findMany({ where: { facilityId: FACILITY_ID }, orderBy: { sortOrder: "asc" } });
+  const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const at = (dayOffset: number, minute: number) =>
+    new Date(new Date(`${todayKst}T00:00:00+09:00`).getTime() + dayOffset * 86400_000 + minute * 60_000);
+  const samples = [
+    { day: 0, court: 0, start: h(19), end: h(20, 30), name: "김민수", phone: "01012345678" },
+    { day: 0, court: 2, start: h(20), end: h(22), name: "동호회 화요팀", phone: "01098765432" },
+    { day: 1, court: 1, start: h(18), end: h(19), name: "이서연", phone: "01055556666" },
+    { day: 1, court: 3, start: h(20, 30), end: h(21, 30), name: "박지훈", phone: null },
+  ];
+  for (const [i, s] of samples.entries()) {
+    const startAt = at(s.day, s.start);
+    const endAt = at(s.day, s.end);
+    if (startAt.getTime() <= Date.now()) continue;
+    const slots: Date[] = [];
+    for (let t = startAt.getTime(); t < endAt.getTime(); t += 30 * 60_000) slots.push(new Date(t));
+    await db.booking.create({
+      data: {
+        bookingNo: `PB-SEED-${i + 1}`,
+        facilityId: FACILITY_ID,
+        courtId: courts[s.court].id,
+        startAt,
+        endAt,
+        totalAmount: slots.length * 15000,
+        status: "confirmed",
+        source: "manual",
+        guestName: s.name,
+        guestPhone: s.phone,
+        slots: { create: slots.map((slotStart) => ({ courtId: courts[s.court].id, slotStart })) },
+      },
+    });
+  }
 }
 
 main()
