@@ -1,0 +1,460 @@
+// PRD 4장 "데이터베이스 테이블 초안"의 18개 테이블.
+// - 금액: 원 단위 정수(Int). Float/Decimal 금지.
+// - 시각: timestamptz(UTC 저장, 표시는 Asia/Seoul).
+// - 하루 중 시각(운영시간·가격 시간대): 자정부터의 분(0~1440, 30분 배수).
+// - Prisma가 표현하지 못하는 CHECK/EXCLUDE 제약은
+//   prisma/migrations/*_constraints/migration.sql 에 직접 작성했다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── enums ───────────────────────────
+
+enum UserRole {
+  user
+  admin
+}
+
+enum FacilityStatus {
+  pending
+  approved
+  rejected
+  suspended
+}
+
+enum StaffRole {
+  owner
+  staff
+}
+
+enum DayType {
+  weekday
+  weekend
+  holiday // TODO(open-issue): 공휴일 가격 정책이 정해진 뒤 사용 (O07은 평일/주말만)
+}
+
+enum BookingStatus {
+  held
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+enum BookingSource {
+  app
+  manual
+  open_play
+}
+
+enum OpenPlaySessionStatus {
+  open
+  cancelled
+}
+
+enum ParticipantStatus {
+  joined
+  cancelled
+}
+
+enum PaymentStatus {
+  ready
+  done
+  partial_cancelled
+  cancelled
+  failed
+}
+
+enum RefundReason {
+  user_cancel
+  facility_cancel
+  admin
+}
+
+enum SettlementStatus {
+  pending
+  paid
+}
+
+enum NotificationStatus {
+  sent
+  failed
+}
+
+// ─────────────────────────── 계정·시설 ───────────────────────────
+
+model User {
+  id              String   @id @default(cuid())
+  kakaoId         String   @unique @map("kakao_id")
+  name            String?
+  phone           String?
+  email           String?
+  role            UserRole @default(user)
+  marketingAgreed Boolean  @default(false) @map("marketing_agreed")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  approvedFacilities   Facility[]             @relation("FacilityApprover")
+  staffOf              FacilityStaff[]
+  bookings             Booking[]
+  openPlayParticipants OpenPlayParticipant[]
+  payments             Payment[]
+  facilityCustomers    FacilityCustomer[]
+  notifications        Notification[]
+
+  @@map("users")
+}
+
+model Facility {
+  id             String         @id @default(cuid())
+  name           String
+  address        String
+  regionSido     String         @map("region_sido")
+  regionSigungu  String         @map("region_sigungu")
+  lat            Float?
+  lng            Float?
+  phone          String?
+  description    String?
+  photos         Json           @default("[]")
+  amenities      Json           @default("[]")
+  businessNo     String?        @map("business_no")
+  /// 암호화된 값만 저장한다(평문 금지). 로그에 남기지 않는다.
+  bankAccount    String?        @map("bank_account")
+  status         FacilityStatus @default(pending)
+  approvedAt     DateTime?      @map("approved_at") @db.Timestamptz(6)
+  approvedById   String?        @map("approved_by")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  approvedBy        User?               @relation("FacilityApprover", fields: [approvedById], references: [id])
+  staff             FacilityStaff[]
+  courts            Court[]
+  operatingHours    OperatingHour[]
+  blackouts         Blackout[]
+  priceRules        PriceRule[]
+  bookingPolicy     BookingPolicy?
+  cancellationTiers CancellationTier[]
+  bookings          Booking[]
+  openPlaySessions  OpenPlaySession[]
+  settlements       Settlement[]
+  customers         FacilityCustomer[]
+
+  @@index([status, regionSido, regionSigungu])
+  @@map("facilities")
+}
+
+model FacilityStaff {
+  id         String    @id @default(cuid())
+  facilityId String    @map("facility_id")
+  userId     String    @map("user_id")
+  role       StaffRole @default(owner)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, userId])
+  @@index([userId])
+  @@map("facility_staff")
+}
+
+model Court {
+  id         String   @id @default(cuid())
+  facilityId String   @map("facility_id")
+  name       String
+  surface    String?
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  facility     Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  blackouts    Blackout[]
+  bookings     Booking[]
+  bookingSlots BookingSlot[]
+
+  @@unique([facilityId, name])
+  @@map("courts")
+}
+
+// ─────────────────────────── 운영 설정 ───────────────────────────
+
+/// 요일별 운영시간. weekday 0=일요일 … 6=토요일 (JS Date.getDay()와 같음, KST 기준).
+/// open_minute/close_minute: 자정부터의 분, 30분 배수, open < close <= 1440 (CHECK).
+model OperatingHour {
+  id          String @id @default(cuid())
+  facilityId  String @map("facility_id")
+  weekday     Int
+  openMinute  Int    @map("open_minute")
+  closeMinute Int    @map("close_minute")
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, weekday])
+  @@map("operating_hours")
+}
+
+/// 휴무일·임시 차단·대관. court_id가 null이면 시설 전체.
+model Blackout {
+  id         String   @id @default(cuid())
+  facilityId String   @map("facility_id")
+  courtId    String?  @map("court_id")
+  startAt    DateTime @map("start_at") @db.Timestamptz(6)
+  endAt      DateTime @map("end_at") @db.Timestamptz(6)
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  court    Court?   @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, startAt])
+  @@map("blackouts")
+}
+
+/// 시간대별 30분당 가격. 같은 시설·같은 day_type 안에서 시간대가 겹치면 DB가 거부한다 (EXCLUDE).
+model PriceRule {
+  id            String  @id @default(cuid())
+  facilityId    String  @map("facility_id")
+  dayType       DayType @map("day_type")
+  startMinute   Int     @map("start_minute")
+  endMinute     Int     @map("end_minute")
+  pricePer30min Int     @map("price_per_30min")
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, dayType])
+  @@map("price_rules")
+}
+
+/// 시설당 1행.
+model BookingPolicy {
+  facilityId           String   @id @map("facility_id")
+  advanceDays          Int      @default(14) @map("advance_days")
+  maxMinutesPerDay     Int      @default(120) @map("max_minutes_per_day")
+  minMinutesPerBooking Int      @default(60) @map("min_minutes_per_booking")
+  maxMinutesPerBooking Int      @default(120) @map("max_minutes_per_booking")
+  holdMinutes          Int      @default(10) @map("hold_minutes")
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("booking_policies")
+}
+
+/// 이용 hours_before 시간 전까지 취소하면 refund_percent% 환불. 예: (48,100), (24,50), (0,0)
+model CancellationTier {
+  id            String @id @default(cuid())
+  facilityId    String @map("facility_id")
+  hoursBefore   Int    @map("hours_before")
+  refundPercent Int    @map("refund_percent")
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@unique([facilityId, hoursBefore])
+  @@map("cancellation_tiers")
+}
+
+// ─────────────────────────── 예약·오픈플레이 ───────────────────────────
+
+/// user_id가 null이면 운영자 수동 예약(guest_* 사용) 또는 오픈플레이 코트 확보.
+model Booking {
+  id            String        @id @default(cuid())
+  bookingNo     String        @unique @map("booking_no")
+  userId        String?       @map("user_id")
+  facilityId    String        @map("facility_id")
+  courtId       String        @map("court_id")
+  startAt       DateTime      @map("start_at") @db.Timestamptz(6)
+  endAt         DateTime      @map("end_at") @db.Timestamptz(6)
+  totalAmount   Int           @map("total_amount")
+  status        BookingStatus
+  source        BookingSource
+  holdExpiresAt DateTime?     @map("hold_expires_at") @db.Timestamptz(6)
+  guestName     String?       @map("guest_name")
+  guestPhone    String?       @map("guest_phone")
+  cancelledAt   DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason  String?       @map("cancel_reason")
+  /// source=open_play 일 때 연결된 세션.
+  openPlaySessionId String?   @map("open_play_session_id")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user            User?            @relation(fields: [userId], references: [id])
+  facility        Facility         @relation(fields: [facilityId], references: [id])
+  court           Court            @relation(fields: [courtId], references: [id])
+  openPlaySession OpenPlaySession? @relation(fields: [openPlaySessionId], references: [id])
+  slots           BookingSlot[]
+  payments        Payment[]
+  notifications   Notification[]
+
+  @@index([userId, startAt])
+  @@index([facilityId, startAt])
+  @@index([status, holdExpiresAt])
+  @@map("bookings")
+}
+
+/// 30분 슬롯 하나 = 1행. UNIQUE(court_id, slot_start)가 중복 예약을 DB에서 막는다.
+/// 예약 취소·선점 만료 시 행을 삭제한다.
+model BookingSlot {
+  id        String   @id @default(cuid())
+  bookingId String   @map("booking_id")
+  courtId   String   @map("court_id")
+  slotStart DateTime @map("slot_start") @db.Timestamptz(6)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  court   Court   @relation(fields: [courtId], references: [id])
+
+  @@unique([courtId, slotStart])
+  @@index([bookingId])
+  @@map("booking_slots")
+}
+
+/// 세션 시간의 코트는 코트마다 booking(source=open_play) 1건으로 잡는다.
+model OpenPlaySession {
+  id         String                @id @default(cuid())
+  facilityId String                @map("facility_id")
+  courtIds   String[]              @map("court_ids")
+  title      String
+  startAt    DateTime              @map("start_at") @db.Timestamptz(6)
+  endAt      DateTime              @map("end_at") @db.Timestamptz(6)
+  capacity   Int
+  fee        Int
+  status     OpenPlaySessionStatus @default(open)
+  createdAt  DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  facility     Facility              @relation(fields: [facilityId], references: [id])
+  participants OpenPlayParticipant[]
+  bookings     Booking[]
+
+  @@index([facilityId, startAt])
+  @@map("open_play_sessions")
+}
+
+model OpenPlayParticipant {
+  id        String            @id @default(cuid())
+  sessionId String            @map("session_id")
+  userId    String            @map("user_id")
+  /// 참가비가 결제된 payment.
+  paymentId String?           @unique @map("payment_id")
+  status    ParticipantStatus @default(joined)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session  OpenPlaySession @relation(fields: [sessionId], references: [id])
+  user     User            @relation(fields: [userId], references: [id])
+  payment  Payment?        @relation("ParticipantPaidBy", fields: [paymentId], references: [id])
+  /// 이 참가 건으로 시도한 결제들(실패·재시도 포함).
+  payments Payment[]       @relation("ParticipantPayments")
+
+  @@unique([sessionId, userId])
+  @@map("open_play_participants")
+}
+
+// ─────────────────────────── 결제·정산·알림·회원 ───────────────────────────
+
+/// booking_id 와 participant_id 중 정확히 하나만 채운다 (CHECK).
+model Payment {
+  id             String        @id @default(cuid())
+  orderId        String        @unique @map("order_id")
+  bookingId      String?       @map("booking_id")
+  participantId  String?       @map("participant_id")
+  userId         String        @map("user_id")
+  amount         Int
+  method         String?
+  tossPaymentKey String?       @unique @map("toss_payment_key")
+  status         PaymentStatus @default(ready)
+  approvedAt     DateTime?     @map("approved_at") @db.Timestamptz(6)
+  /// 토스 승인 응답 원본
+  raw            Json?
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  booking         Booking?             @relation(fields: [bookingId], references: [id])
+  participant     OpenPlayParticipant? @relation("ParticipantPayments", fields: [participantId], references: [id])
+  paidParticipant OpenPlayParticipant? @relation("ParticipantPaidBy")
+  user            User                 @relation(fields: [userId], references: [id])
+  refunds         Refund[]
+
+  @@index([bookingId])
+  @@index([participantId])
+  @@map("payments")
+}
+
+/// 부분취소 이력.
+model Refund {
+  id            String       @id @default(cuid())
+  paymentId     String       @map("payment_id")
+  amount        Int
+  refundPercent Int          @map("refund_percent")
+  reason        RefundReason
+  tossCancelTx  String?      @map("toss_cancel_tx")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+/// TODO(open-issue): 수수료율·부담 주체, 정산 구조(지급대행), 지급 후 환불 차감 방식 미정. 주 1회 생성(가정).
+model Settlement {
+  id           String           @id @default(cuid())
+  facilityId   String           @map("facility_id")
+  periodStart  DateTime         @map("period_start") @db.Timestamptz(6)
+  periodEnd    DateTime         @map("period_end") @db.Timestamptz(6)
+  grossAmount  Int              @map("gross_amount")
+  refundAmount Int              @map("refund_amount")
+  feeAmount    Int              @map("fee_amount")
+  payoutAmount Int              @map("payout_amount")
+  status       SettlementStatus @default(pending)
+  paidAt       DateTime?        @map("paid_at") @db.Timestamptz(6)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id])
+
+  @@unique([facilityId, periodStart])
+  @@map("settlements")
+}
+
+/// 운영자의 "회원 관리" (O11).
+model FacilityCustomer {
+  id          String   @id @default(cuid())
+  facilityId  String   @map("facility_id")
+  userId      String   @map("user_id")
+  visitCount  Int      @default(0) @map("visit_count")
+  noShowCount Int      @default(0) @map("no_show_count")
+  memo        String?
+  isBlocked   Boolean  @default(false) @map("is_blocked")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([facilityId, userId])
+  @@map("facility_customers")
+}
+
+/// 알림톡 발송 이력. user_id 또는 phone 중 하나는 있어야 한다 (CHECK).
+model Notification {
+  id           String             @id @default(cuid())
+  userId       String?            @map("user_id")
+  phone        String?
+  templateCode String             @map("template_code")
+  bookingId    String?            @map("booking_id")
+  status       NotificationStatus
+  sentAt       DateTime?          @map("sent_at") @db.Timestamptz(6)
+  vendorMsgId  String?            @map("vendor_msg_id")
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user    User?    @relation(fields: [userId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@map("notifications")
+}

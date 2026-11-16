@@ -107,11 +107,15 @@ tests/
 
 ```bash
 pnpm install
-docker compose up -d db        # 로컬 PostgreSQL
-pnpm prisma migrate dev        # 마이그레이션 적용
-pnpm prisma db seed            # 샘플 데이터
+cp .env.example .env           # 처음 한 번
+docker compose up -d db        # 로컬 PostgreSQL 16 (pickleball, pickleball_test DB 생성)
+pnpm db:migrate                # = prisma migrate dev, 마이그레이션 적용·새 마이그레이션 생성
+pnpm db:seed                   # 샘플 시설(성수 인도어 피클볼)·코트·가격·규칙
 pnpm dev                       # 개발 서버
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-(코드가 아직 없으므로 위 명령은 1단계에서 만든다. 실제 스크립트가 바뀌면 이 섹션도 함께 고친다.)
+- `pnpm test`는 `DATABASE_URL_TEST`(이름에 `test`가 들어간 DB만 허용)를 매번 비우고 마이그레이션한 뒤 Vitest를 돌린다. 개발 DB는 건드리지 않는다.
+- CHECK/EXCLUDE 같은 제약은 Prisma 스키마로 표현할 수 없으므로 `prisma migrate dev --create-only`로 빈 마이그레이션을 만든 뒤 SQL을 직접 쓴다. 기존 예: `prisma/migrations/*_constraints/migration.sql`.
+- 하루 중 시각(운영시간·가격 시간대)은 자정부터의 분(`open_minute` 등, 0~1440)으로 저장한다. 날짜가 있는 시각만 `timestamptz`다.
+- 모든 id는 문자열 cuid다(Auth.js Prisma 어댑터와 맞추기 위해).
