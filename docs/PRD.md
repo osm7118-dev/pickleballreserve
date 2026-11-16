@@ -173,9 +173,9 @@ PostgreSQL 기준 18개 테이블이다. 핵심은 예약을 30분 슬롯 단위
 
 | 테이블 | 주요 컬럼 | 비고 |
 |---|---|---|
-| `operating_hours` | id, facility_id, weekday(0~6), open_time, close_time | 30분 배수만 허용 (CHECK) |
+| `operating_hours` | id, facility_id, weekday(0~6, 0=일요일), open_minute, close_minute | 자정부터의 분(0~1440). 30분 배수만 허용 (CHECK) |
 | `blackouts` | id, facility_id, court_id(null=전체), start_at, end_at, reason | 휴무일·임시 차단·대관 |
-| `price_rules` | id, facility_id, day_type(`weekday`/`weekend`/`holiday`), start_time, end_time, price_per_30min | 시간대별 가격, 겹침 금지. MVP 화면(O07)은 평일/주말만 다루므로 holiday는 공휴일 가격 오픈 이슈가 정해진 뒤 사용 |
+| `price_rules` | id, facility_id, day_type(`weekday`/`weekend`/`holiday`), start_minute, end_minute, price_per_30min | 시간대별 가격, 겹침 금지. MVP 화면(O07)은 평일/주말만 다루므로 holiday는 공휴일 가격 오픈 이슈가 정해진 뒤 사용 |
 | `booking_policies` | facility_id(PK), advance_days, max_minutes_per_day, min_minutes_per_booking, max_minutes_per_booking, hold_minutes(기본 10) | 1시설 1행 |
 | `cancellation_tiers` | id, facility_id, hours_before, refund_percent | 예: (48,100), (24,50), (0,0) |
 
@@ -183,9 +183,9 @@ PostgreSQL 기준 18개 테이블이다. 핵심은 예약을 30분 슬롯 단위
 
 | 테이블 | 주요 컬럼 | 비고 |
 |---|---|---|
-| `bookings` | id, booking_no, user_id(null=수동), facility_id, court_id, start_at, end_at, total_amount, status(`held`/`confirmed`/`cancelled`/`completed`/`no_show`), source(`app`/`manual`/`open_play`), hold_expires_at, guest_name, guest_phone, cancelled_at, cancel_reason, created_at | 수동 예약은 guest_* 사용 |
+| `bookings` | id, booking_no, user_id(null=수동), facility_id, court_id, start_at, end_at, total_amount, status(`held`/`confirmed`/`cancelled`/`completed`/`no_show`), source(`app`/`manual`/`open_play`), hold_expires_at, guest_name, guest_phone, cancelled_at, cancel_reason, open_play_session_id, created_at | 수동 예약은 guest_* 사용. source=`open_play`면 open_play_session_id로 세션과 연결 |
 | `booking_slots` | id, booking_id, court_id, slot_start | **UQ(court_id, slot_start)**, 취소·만료 시 행 삭제 |
-| `open_play_sessions` | id, facility_id, court_ids(int[]), title, start_at, end_at, capacity, fee, status | 세션 시간의 코트 슬롯은 booking(source=`open_play`)으로 잡아 둔다. 코트가 여러 개면 코트마다 booking을 1건씩 만든다(bookings.court_id는 단일 값) |
+| `open_play_sessions` | id, facility_id, court_ids(코트 id 배열), title, start_at, end_at, capacity, fee, status(`open`/`cancelled`) | 세션 시간의 코트 슬롯은 booking(source=`open_play`)으로 잡아 둔다. 코트가 여러 개면 코트마다 booking을 1건씩 만든다(bookings.court_id는 단일 값) |
 | `open_play_participants` | id, session_id, user_id, payment_id, status(`joined`/`cancelled`) | UQ(session_id, user_id) |
 
 ### 결제·정산·알림·회원

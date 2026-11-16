@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* 디자인 토큰: "코트 그린 + 볼 옐로" (design/design-tokens.md) */
+@theme {
+  --color-primary: #0f6b4e;
+  --color-primary-hover: #0a5039;
+  --color-primary-soft: #e3f1ea;
+  --color-accent: #dcf35c;
+  --color-accent-line: #a9b800;
+  --color-ink: #16201b;
+  --color-muted: #4f5a54;
+  --color-muted-2: #5b6660;
+  --color-bg: #f4f5f1;
+  --color-surface: #ffffff;
+  --color-line: #e2e5df;
+  --color-line-strong: #c9d1cb;
+  --color-slot-booked: #e7e9e5;
+  --color-warn: #b54708;
+  --color-warn-bg: #fef3e7;
+  --color-warn-ink: #8a3605;
+  --color-danger: #b42318;
+  --color-danger-bg: #fdecea;
+  --color-danger-ink: #8f1d14;
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --radius-card: 18px;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+body {
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.hatch {
+  background-image: repeating-linear-gradient(-45deg, #e7e9e5 0 4px, #f8f9f6 4px 9px);
+}
+
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 2px rgba(22, 32, 27, 0.06);
+}
