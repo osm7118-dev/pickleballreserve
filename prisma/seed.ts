@@ -12,6 +12,14 @@ const ADMIN_ID = "seed-user-admin";
 const CUSTOMER_ID = "seed-user-customer";
 
 const COURT_NAME = "A코트";
+// 매일 06:00~23:00 운영 (U18 캘린더 시간표 범위와 같다)
+const OPEN = 6 * 60;
+const CLOSE = 23 * 60;
+const PRICE_RULES = [
+  { dayType: "weekday" as DayType, startMinute: OPEN, endMinute: 18 * 60, pricePer30min: 10000 },
+  { dayType: "weekday" as DayType, startMinute: 18 * 60, endMinute: CLOSE, pricePer30min: 15000 },
+  { dayType: "weekend" as DayType, startMinute: OPEN, endMinute: CLOSE, pricePer30min: 15000 },
+];
 
 const h = (hour: number, minute = 0) => hour * 60 + minute;
 
@@ -65,17 +73,11 @@ async function main() {
       },
       // 평일 07:00~23:00, 주말 08:00~22:00
       operatingHours: {
-        create: [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
-          weekday === 0 || weekday === 6
-            ? { weekday, openMinute: h(8), closeMinute: h(22) }
-            : { weekday, openMinute: h(7), closeMinute: h(23) },
-        ),
+        create: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, openMinute: OPEN, closeMinute: CLOSE })),
       },
       priceRules: {
         create: [
-          { dayType: "weekday" as DayType, startMinute: h(7), endMinute: h(18), pricePer30min: 10000 },
-          { dayType: "weekday" as DayType, startMinute: h(18), endMinute: h(23), pricePer30min: 15000 },
-          { dayType: "weekend" as DayType, startMinute: h(8), endMinute: h(22), pricePer30min: 15000 },
+          ...PRICE_RULES,
         ],
       },
       // PRD 흐름 B-7 기본값: 사전예약 14일, 1일 최대 120분, 1회 60~120분, 선점 10분
@@ -107,12 +109,25 @@ async function main() {
   });
   await db.court.updateMany({ where: { facilityId: FACILITY_ID, name: { not: COURT_NAME } }, data: { isActive: false } });
 
+  // 이미 만들어진 DB도 운영시간·가격을 06:00~23:00 기준으로 맞춘다.
+  for (const weekday of [0, 1, 2, 3, 4, 5, 6]) {
+    await db.operatingHour.upsert({
+      where: { facilityId_weekday: { facilityId: FACILITY_ID, weekday } },
+      update: { openMinute: OPEN, closeMinute: CLOSE },
+      create: { facilityId: FACILITY_ID, weekday, openMinute: OPEN, closeMinute: CLOSE },
+    });
+  }
+  await db.$transaction([
+    db.priceRule.deleteMany({ where: { facilityId: FACILITY_ID } }),
+    db.priceRule.createMany({ data: PRICE_RULES.map((r) => ({ ...r, facilityId: FACILITY_ID })) }),
+  ]);
+
   await seedSecondFacility();
   await seedPlayers();
   await seedCoaches();
   await seedAnnouncements();
-  await seedSampleBookings();
   await seedOpenPlay();
+  await seedSampleBookings();
   console.log("Seeded facility:", FACILITY_ID);
 }
 
@@ -281,22 +296,21 @@ async function seedOpenPlay() {
     });
   }
 
-  const upcoming = await db.openPlaySession.count({ where: { facilityId: FACILITY_ID, status: "open", startAt: { gt: now } } });
-  if (upcoming > 0 || active.length === 0) return;
+  if (active.length === 0) return;
   const courtId = active[0].id;
-  const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-  const at = (dayOffset: number, minute: number) =>
-    new Date(new Date(`${todayKst}T00:00:00+09:00`).getTime() + dayOffset * 86400_000 + minute * 60_000);
-  const sessions = [
-    { day: 1, start: h(10), end: h(12), title: "오전 오픈플레이 (초급)", capacity: 8, fee: 10000, joined: 6 },
-    { day: 2, start: h(20), end: h(22), title: "나이트 오픈플레이 (중급)", capacity: 8, fee: 15000, joined: 8 },
-    { day: 3, start: h(19), end: h(21), title: "퇴근 후 오픈플레이 (초·중급)", capacity: 10, fee: 12000, joined: 7 },
-    { day: 4, start: h(9), end: h(11), title: "모닝 오픈플레이 (전 레벨)", capacity: 12, fee: 12000, joined: 9 },
-    { day: 6, start: h(14), end: h(16), title: "주말 오픈플레이 (전 레벨)", capacity: 12, fee: 15000, joined: 11 },
-  ];
-  for (const s of sessions) {
-    const startAt = at(s.day, s.start);
-    const endAt = at(s.day, s.end);
+  // 오늘부터 14일 동안 하루 1개(2시간) 오픈플레이. 그날 열린 세션이 이미 있으면 건너뛴다.
+  for (let day = 0; day < SAMPLE_DAYS; day++) {
+    const date = kstDate(day);
+    const wd = weekdayOf(date);
+    const s = OPEN_PLAY_BY_WEEKDAY[wd];
+    const startAt = at(date, s.start);
+    const endAt = at(date, s.start + 120);
+    if (startAt.getTime() <= now.getTime()) continue;
+    const exists = await db.openPlaySession.count({
+      where: { facilityId: FACILITY_ID, status: "open", startAt: { gte: at(date, 0), lt: at(date, 24 * 60) } },
+    });
+    if (exists > 0) continue;
+    const joined = Math.min(s.capacity, s.capacity - 4 + ((day * 3) % 5)); // 정원 -4 ~ 정원(마감)
     const slots: Date[] = [];
     for (let t = startAt.getTime(); t < endAt.getTime(); t += 30 * 60_000) slots.push(new Date(t));
     try {
@@ -318,7 +332,7 @@ async function seedOpenPlay() {
             slots: { create: slots.map((slotStart) => ({ courtId, slotStart })) },
           },
         });
-        for (let i = 0; i < s.joined; i++) {
+        for (let i = 0; i < joined; i++) {
           const participant = await tx.openPlayParticipant.create({ data: { sessionId: session.id, userId: playerId(i) } });
           const payment = await tx.payment.create({
             data: {
@@ -335,45 +349,70 @@ async function seedOpenPlay() {
         }
       });
     } catch (e) {
-      console.warn("skip open play sample (slot taken):", s.title, e instanceof Error ? e.message.split("\n")[0] : e);
+      console.warn("skip open play sample (slot taken):", date, e instanceof Error ? e.message.split("\n")[0] : e);
     }
   }
 }
 
-// 운영자 캘린더가 비어 보이지 않도록 오늘·내일 수동 예약 몇 건. 예약이 하나도 없을 때만 넣는다.
+const SAMPLE_DAYS = 14;
+const kstDate = (dayOffset: number) =>
+  new Date(Date.now() + 9 * 3600_000 + dayOffset * 86400_000).toISOString().slice(0, 10);
+const at = (date: string, minute: number) => new Date(new Date(`${date}T00:00:00+09:00`).getTime() + minute * 60_000);
+const weekdayOf = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
+
+// 요일별 오픈플레이 (2시간). 0=일 … 6=토
+const OPEN_PLAY_BY_WEEKDAY: Record<number, { start: number; title: string; capacity: number; fee: number }> = {
+  0: { start: h(14), title: "주말 오픈플레이 (전 레벨)", capacity: 12, fee: 15000 },
+  1: { start: h(19), title: "퇴근 후 오픈플레이 (초·중급)", capacity: 10, fee: 12000 },
+  2: { start: h(10), title: "오전 오픈플레이 (초급)", capacity: 8, fee: 10000 },
+  3: { start: h(20), title: "나이트 오픈플레이 (중급)", capacity: 8, fee: 15000 },
+  4: { start: h(9), title: "모닝 오픈플레이 (전 레벨)", capacity: 12, fee: 12000 },
+  5: { start: h(19), title: "불금 오픈플레이 (전 레벨)", capacity: 12, fee: 15000 },
+  6: { start: h(10), title: "주말 오픈플레이 (전 레벨)", capacity: 12, fee: 15000 },
+};
+
+// 날마다 몇 시간은 "마감"으로 보이도록 전화·현장 예약 샘플. 날짜별 번호(PB-SEED-yyyyMMdd-n)로 한 번만 넣는다.
+const CLOSED_PATTERNS: number[][][] = [
+  [[7, 8], [12, 13], [18, 19], [21, 23]],
+  [[6, 7], [8, 9], [15, 16], [17, 18]],
+  [[7, 9], [13, 14], [16, 17], [22, 23]],
+];
+const GUESTS = ["김민수", "동호회 화요팀", "이서연", "박지훈", "레슨 (김하늘 코치)", "정기 대관", "최유나"];
+
 async function seedSampleBookings() {
-  if ((await db.booking.count({ where: { facilityId: FACILITY_ID } })) > 0) return;
   const courts = await db.court.findMany({ where: { facilityId: FACILITY_ID, isActive: true }, orderBy: { sortOrder: "asc" } });
-  const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-  const at = (dayOffset: number, minute: number) =>
-    new Date(new Date(`${todayKst}T00:00:00+09:00`).getTime() + dayOffset * 86400_000 + minute * 60_000);
-  const samples = [
-    { day: 0, court: 0, start: h(19), end: h(20), name: "김민수", phone: "01012345678" },
-    { day: 0, court: 0, start: h(20), end: h(22), name: "동호회 화요팀", phone: "01098765432" },
-    { day: 1, court: 0, start: h(18), end: h(19), name: "이서연", phone: "01055556666" },
-    { day: 1, court: 0, start: h(20), end: h(21), name: "박지훈", phone: null },
-  ];
-  for (const [i, s] of samples.entries()) {
-    const startAt = at(s.day, s.start);
-    const endAt = at(s.day, s.end);
-    if (startAt.getTime() <= Date.now()) continue;
-    const slots: Date[] = [];
-    for (let t = startAt.getTime(); t < endAt.getTime(); t += 30 * 60_000) slots.push(new Date(t));
-    await db.booking.create({
-      data: {
-        bookingNo: `PB-SEED-${i + 1}`,
-        facilityId: FACILITY_ID,
-        courtId: courts[s.court].id,
-        startAt,
-        endAt,
-        totalAmount: slots.length * 15000,
-        status: "confirmed",
-        source: "manual",
-        guestName: s.name,
-        guestPhone: s.phone,
-        slots: { create: slots.map((slotStart) => ({ courtId: courts[s.court].id, slotStart })) },
-      },
-    });
+  if (courts.length === 0) return;
+  const courtId = courts[0].id;
+  for (let day = 0; day < SAMPLE_DAYS; day++) {
+    const date = kstDate(day);
+    const prefix = `PB-SEED-${date.replaceAll("-", "")}-`;
+    if ((await db.booking.count({ where: { bookingNo: { startsWith: prefix } } })) > 0) continue;
+    for (const [i, [sh, eh]] of CLOSED_PATTERNS[day % CLOSED_PATTERNS.length].entries()) {
+      const startAt = at(date, h(sh));
+      const endAt = at(date, h(eh));
+      if (startAt.getTime() <= Date.now()) continue;
+      const slots: Date[] = [];
+      for (let t = startAt.getTime(); t < endAt.getTime(); t += 30 * 60_000) slots.push(new Date(t));
+      try {
+        await db.booking.create({
+          data: {
+            bookingNo: `${prefix}${i + 1}`,
+            facilityId: FACILITY_ID,
+            courtId,
+            startAt,
+            endAt,
+            totalAmount: slots.length * 15000,
+            status: "confirmed",
+            source: "manual",
+            guestName: GUESTS[(day + i) % GUESTS.length],
+            guestPhone: null,
+            slots: { create: slots.map((slotStart) => ({ courtId, slotStart })) },
+          },
+        });
+      } catch {
+        // 이미 예약된 시간(오픈플레이·이용자 예약)이면 건너뛴다.
+      }
+    }
   }
 }
 
