@@ -10,7 +10,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="flex min-h-dvh flex-col px-5 pt-20 pb-10">
       <div className="flex-1">
-        <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary">
+        <div className="mb-6 flex h-14 w-14 items-center justify-center bg-primary">
           <span className="block h-6 w-6 rounded-full bg-accent" />
         </div>
         <h1 className="text-[28px] leading-tight font-extrabold">
@@ -25,7 +25,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <button
           type="button"
           disabled
-          className="flex h-[54px] w-full items-center justify-center gap-2 rounded-[14px] bg-[#FEE500] text-[16px] font-bold text-[#191919] opacity-50"
+          className="flex h-[54px] w-full items-center justify-center gap-2 bg-[#FEE500] text-[16px] font-bold text-[#191919] opacity-50"
         >
           카카오로 시작하기
         </button>

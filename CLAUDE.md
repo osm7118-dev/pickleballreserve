@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-인도어 피클볼장 통합 예약 플랫폼 MVP. 이용자는 모바일 웹(PWA)에서 30분 단위로 코트를 검색·예약·결제하고, 시설 운영자와 플랫폼 관리자는 PC 웹에서 시설·예약·정산을 관리한다.
+인도어 피클볼장 통합 예약 플랫폼 MVP. 이용자는 모바일 웹(PWA)에서 1시간 단위로 코트를 검색·예약·결제하고, 시설 운영자와 플랫폼 관리자는 PC 웹에서 시설·예약·정산을 관리한다.
 
 ## 기준 문서: docs/PRD.md
 
@@ -32,13 +32,13 @@
 docs/
   PRD.md                     # 기준 문서
 prisma/
-  schema.prisma              # PRD 4장 18개 테이블
+  schema.prisma              # PRD 4장 테이블
   migrations/                # UNIQUE/CHECK 등 Prisma가 못 만드는 제약은 SQL 마이그레이션에 직접 작성
   seed.ts                    # 개발용 시설·코트·가격 샘플
 src/
   app/
-    (user)/                  # 이용자 모바일 웹 U01~U12
-    operator/                # 운영자 웹 O01~O11
+    (user)/                  # 이용자 모바일 웹 U01~U18
+    operator/                # 운영자 웹 O01~O13
     admin/                   # 관리자 웹 A01~A05
     api/
       payments/              # 토스 성공/실패 리다이렉트, 승인
@@ -49,12 +49,15 @@ src/
     payment/                 # PaymentGateway 인터페이스, toss.ts, mock.ts
     notification/            # Notifier 인터페이스, alimtalk.ts, console.ts
     refund/                  # cancellation_tiers 기반 환불액 계산
+    open-play/               # 오픈플레이 참가·결제·취소
+    lesson/                  # 개인 레슨 가능 시간·선점·취소
+    club/                    # 내 매장 선택, 홈 "내 예약" 목록
     settlement/
     auth/                    # 세션, 역할(user/admin), facility_staff 권한 확인
   components/                # 공용 UI 컴포넌트
   lib/
     db.ts                    # Prisma client 싱글턴
-    time.ts                  # 30분 슬롯, KST 변환 유틸
+    time.ts                  # 30분 저장 슬롯·1시간 예약 단위, KST 변환 유틸
     money.ts                 # 원 단위 정수 금액 유틸
     env.ts                   # Zod로 검증한 환경변수
 tests/
@@ -70,7 +73,7 @@ tests/
 
 - 금액은 모두 원 단위 정수(`Int`)다. 소수, `float`, `Decimal`을 쓰지 않는다.
 - 시각은 DB에 `timestamptz`로 저장하고, 화면 표시와 "같은 날" 판단은 `Asia/Seoul` 기준으로 한다.
-- 예약 시작·종료는 항상 30분 경계다. 슬롯은 `booking_slots` 행 하나가 30분 하나다.
+- 예약 시작·종료는 항상 1시간 경계(정시)다(`BOOKING_UNIT_MINUTES`). 저장 슬롯은 그대로 `booking_slots` 행 하나가 30분 하나다.
 - 중복 예약은 `booking_slots`의 `UNIQUE(court_id, slot_start)`로 DB에서 막는다. 앱 코드의 "빈 슬롯 확인"만으로 막지 않는다.
 - 예약 선점은 PRD 4장 "예약 규칙 검증 순서" 1~7단계를 한 트랜잭션에서, 그 순서대로 실행한다.
 - 금액은 서버가 `price_rules`로 계산한다. 클라이언트가 보낸 금액은 믿지 않는다.
@@ -97,7 +100,7 @@ tests/
 
 한 단계씩 끝내고 다음으로 넘어간다. 각 단계는 별도 PR로 낸다.
 
-1. **DB 스키마** — PRD 4장 18개 테이블을 `schema.prisma`로 옮기고, `booking_slots` 유니크 제약·운영시간 CHECK 제약 마이그레이션, 시드 데이터, docker compose PostgreSQL.
+1. **DB 스키마** — PRD 4장 테이블을 `schema.prisma`로 옮기고, `booking_slots` 유니크 제약·운영시간 CHECK 제약 마이그레이션, 시드 데이터, docker compose PostgreSQL.
 2. **카카오 로그인** — Auth.js 카카오 로그인, U01·U02(휴대폰 번호·약관 동의), 역할/시설 권한 미들웨어, O01 운영자 시작.
 3. **코트 예약** — 슬롯·가격 계산, 예약 규칙 검증 1~7단계, U03~U06 검색→시간표→선점, held 10분 만료 크론, U09·U10 내 예약.
 4. **토스 결제 (Mock 먼저)** — `PaymentGateway` Mock으로 U07·U08 흐름과 확정·취소·부분환불을 먼저 완성하고 테스트한 뒤, 토스 테스트 키로 실제 위젯·승인·취소 API를 붙인다.
@@ -110,7 +113,7 @@ pnpm install
 cp .env.example .env           # 처음 한 번
 docker compose up -d db        # 로컬 PostgreSQL 16 (pickleball, pickleball_test DB 생성)
 pnpm db:migrate                # = prisma migrate dev, 마이그레이션 적용·새 마이그레이션 생성
-pnpm db:seed                   # 샘플 시설(성수 인도어 피클볼)·코트·가격·규칙
+pnpm db:seed                   # 샘플 시설(피클존 PickleZone, 코트 1면)·코트·가격·규칙
 pnpm dev                       # 개발 서버
 pnpm lint && pnpm typecheck && pnpm test
 ```

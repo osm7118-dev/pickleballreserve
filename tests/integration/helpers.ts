@@ -3,6 +3,10 @@ import { PrismaClient, Prisma } from "@prisma/client";
 export const db = new PrismaClient();
 
 const TABLES = [
+  "announcements",
+  "coach_availabilities",
+  "coaches",
+  "lesson_bookings",
   "notifications",
   "facility_customers",
   "settlements",

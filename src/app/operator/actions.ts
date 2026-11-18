@@ -90,8 +90,8 @@ export async function manualBookingAction(formData: FormData) {
 const blackoutSchema = z.object({
   courtId: z.string(),
   date: z.string().refine(isDateStr),
-  start: z.coerce.number().int().multipleOf(30),
-  minutes: z.coerce.number().int().min(30).max(24 * 60).multipleOf(30),
+  start: z.coerce.number().int().multipleOf(60),
+  minutes: z.coerce.number().int().min(60).max(24 * 60).multipleOf(60),
   scope: z.enum(["court", "all"]),
   reason: z.string().trim().max(100).optional(),
 });

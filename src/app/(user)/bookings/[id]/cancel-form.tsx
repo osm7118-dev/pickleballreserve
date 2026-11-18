@@ -15,7 +15,7 @@ export function CancelForm({ bookingId, refundLabel }: { bookingId: string; refu
         <>
           <p className="text-center text-[14px] font-semibold">정말 취소할까요? {refundLabel} 환불돼요.</p>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setConfirming(false)} className="h-12 rounded-[12px] border border-line-strong font-semibold">
+            <button type="button" onClick={() => setConfirming(false)} className="h-12 border border-line-strong font-semibold">
               돌아가기
             </button>
             <button className={btnDanger} disabled={pending}>
@@ -24,7 +24,7 @@ export function CancelForm({ bookingId, refundLabel }: { bookingId: string; refu
           </div>
         </>
       ) : (
-        <button type="button" onClick={() => setConfirming(true)} className="h-12 w-full rounded-[12px] border border-danger font-bold text-danger">
+        <button type="button" onClick={() => setConfirming(true)} className="h-12 w-full border border-danger font-bold text-danger">
           예약 취소하기
         </button>
       )}

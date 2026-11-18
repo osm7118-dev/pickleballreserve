@@ -20,7 +20,7 @@ export function OperatorNav() {
           <Link
             key={m.href}
             href={m.href}
-            className={`flex h-11 shrink-0 items-center rounded-[10px] px-3 text-[15px] font-bold ${
+            className={`flex h-11 shrink-0 items-center px-3 text-[15px] font-bold ${
               active ? "bg-accent text-ink" : "text-white/85 hover:bg-white/10"
             }`}
           >

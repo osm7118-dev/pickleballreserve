@@ -100,39 +100,40 @@ model User {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  approvedFacilities   Facility[]             @relation("FacilityApprover")
+  approvedFacilities   Facility[]            @relation("FacilityApprover")
   staffOf              FacilityStaff[]
   bookings             Booking[]
   openPlayParticipants OpenPlayParticipant[]
   payments             Payment[]
   facilityCustomers    FacilityCustomer[]
   notifications        Notification[]
+  lessonBookings       LessonBooking[]
 
   @@map("users")
 }
 
 model Facility {
-  id             String         @id @default(cuid())
-  name           String
-  address        String
-  regionSido     String         @map("region_sido")
-  regionSigungu  String         @map("region_sigungu")
-  lat            Float?
-  lng            Float?
-  phone          String?
-  description    String?
-  photos         Json           @default("[]")
-  amenities      Json           @default("[]")
-  businessNo     String?        @map("business_no")
+  id            String         @id @default(cuid())
+  name          String
+  address       String
+  regionSido    String         @map("region_sido")
+  regionSigungu String         @map("region_sigungu")
+  lat           Float?
+  lng           Float?
+  phone         String?
+  description   String?
+  photos        Json           @default("[]")
+  amenities     Json           @default("[]")
+  businessNo    String?        @map("business_no")
   /// 암호화된 값만 저장한다(평문 금지). 로그에 남기지 않는다.
-  bankAccount    String?        @map("bank_account")
-  status         FacilityStatus @default(pending)
-  approvedAt     DateTime?      @map("approved_at") @db.Timestamptz(6)
-  approvedById   String?        @map("approved_by")
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bankAccount   String?        @map("bank_account")
+  status        FacilityStatus @default(pending)
+  approvedAt    DateTime?      @map("approved_at") @db.Timestamptz(6)
+  approvedById  String?        @map("approved_by")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  approvedBy        User?               @relation("FacilityApprover", fields: [approvedById], references: [id])
+  approvedBy        User?              @relation("FacilityApprover", fields: [approvedById], references: [id])
   staff             FacilityStaff[]
   courts            Court[]
   operatingHours    OperatingHour[]
@@ -144,6 +145,9 @@ model Facility {
   openPlaySessions  OpenPlaySession[]
   settlements       Settlement[]
   customers         FacilityCustomer[]
+  coaches           Coach[]
+  lessonBookings    LessonBooking[]
+  announcements     Announcement[]
 
   @@index([status, regionSido, regionSigungu])
   @@map("facilities")
@@ -263,25 +267,25 @@ model CancellationTier {
 
 /// user_id가 null이면 운영자 수동 예약(guest_* 사용) 또는 오픈플레이 코트 확보.
 model Booking {
-  id            String        @id @default(cuid())
-  bookingNo     String        @unique @map("booking_no")
-  userId        String?       @map("user_id")
-  facilityId    String        @map("facility_id")
-  courtId       String        @map("court_id")
-  startAt       DateTime      @map("start_at") @db.Timestamptz(6)
-  endAt         DateTime      @map("end_at") @db.Timestamptz(6)
-  totalAmount   Int           @map("total_amount")
-  status        BookingStatus
-  source        BookingSource
-  holdExpiresAt DateTime?     @map("hold_expires_at") @db.Timestamptz(6)
-  guestName     String?       @map("guest_name")
-  guestPhone    String?       @map("guest_phone")
-  cancelledAt   DateTime?     @map("cancelled_at") @db.Timestamptz(6)
-  cancelReason  String?       @map("cancel_reason")
+  id                String        @id @default(cuid())
+  bookingNo         String        @unique @map("booking_no")
+  userId            String?       @map("user_id")
+  facilityId        String        @map("facility_id")
+  courtId           String        @map("court_id")
+  startAt           DateTime      @map("start_at") @db.Timestamptz(6)
+  endAt             DateTime      @map("end_at") @db.Timestamptz(6)
+  totalAmount       Int           @map("total_amount")
+  status            BookingStatus
+  source            BookingSource
+  holdExpiresAt     DateTime?     @map("hold_expires_at") @db.Timestamptz(6)
+  guestName         String?       @map("guest_name")
+  guestPhone        String?       @map("guest_phone")
+  cancelledAt       DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason      String?       @map("cancel_reason")
   /// source=open_play 일 때 연결된 세션.
-  openPlaySessionId String?   @map("open_play_session_id")
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  openPlaySessionId String?       @map("open_play_session_id")
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user            User?            @relation(fields: [userId], references: [id])
   facility        Facility         @relation(fields: [facilityId], references: [id])
@@ -356,31 +360,34 @@ model OpenPlayParticipant {
 
 // ─────────────────────────── 결제·정산·알림·회원 ───────────────────────────
 
-/// booking_id 와 participant_id 중 정확히 하나만 채운다 (CHECK).
+/// booking_id, participant_id, lesson_booking_id 중 정확히 하나만 채운다 (CHECK).
 model Payment {
-  id             String        @id @default(cuid())
-  orderId        String        @unique @map("order_id")
-  bookingId      String?       @map("booking_id")
-  participantId  String?       @map("participant_id")
-  userId         String        @map("user_id")
-  amount         Int
-  method         String?
-  tossPaymentKey String?       @unique @map("toss_payment_key")
-  status         PaymentStatus @default(ready)
-  approvedAt     DateTime?     @map("approved_at") @db.Timestamptz(6)
+  id              String        @id @default(cuid())
+  orderId         String        @unique @map("order_id")
+  bookingId       String?       @map("booking_id")
+  participantId   String?       @map("participant_id")
+  lessonBookingId String?       @map("lesson_booking_id")
+  userId          String        @map("user_id")
+  amount          Int
+  method          String?
+  tossPaymentKey  String?       @unique @map("toss_payment_key")
+  status          PaymentStatus @default(ready)
+  approvedAt      DateTime?     @map("approved_at") @db.Timestamptz(6)
   /// 토스 승인 응답 원본
-  raw            Json?
-  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  raw             Json?
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   booking         Booking?             @relation(fields: [bookingId], references: [id])
   participant     OpenPlayParticipant? @relation("ParticipantPayments", fields: [participantId], references: [id])
   paidParticipant OpenPlayParticipant? @relation("ParticipantPaidBy")
   user            User                 @relation(fields: [userId], references: [id])
+  lessonBooking   LessonBooking?       @relation(fields: [lessonBookingId], references: [id])
   refunds         Refund[]
 
   @@index([bookingId])
   @@index([participantId])
+  @@index([lessonBookingId])
   @@map("payments")
 }
 
@@ -457,4 +464,83 @@ model Notification {
 
   @@index([bookingId])
   @@map("notifications")
+}
+
+// ─────────────────────────── 개인 레슨·공지 ───────────────────────────
+
+/// 시설 소속 코치. 레슨 1회 길이·가격은 코치별.
+model Coach {
+  id            String   @id @default(cuid())
+  facilityId    String   @map("facility_id")
+  name          String
+  bio           String?
+  lessonMinutes Int      @default(60) @map("lesson_minutes")
+  lessonPrice   Int      @map("lesson_price")
+  sortOrder     Int      @default(0) @map("sort_order")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  facility       Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  availabilities CoachAvailability[]
+  lessonBookings LessonBooking[]
+
+  @@index([facilityId])
+  @@map("coaches")
+}
+
+/// 코치의 요일별 레슨 가능 시간. weekday 0=일요일, 분 단위(30분 배수).
+model CoachAvailability {
+  id          String @id @default(cuid())
+  coachId     String @map("coach_id")
+  weekday     Int
+  startMinute Int    @map("start_minute")
+  endMinute   Int    @map("end_minute")
+
+  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@index([coachId, weekday])
+  @@map("coach_availabilities")
+}
+
+/// 개인 레슨 예약. 같은 코치의 held/confirmed 레슨 시간이 겹치면 DB가 거부한다 (EXCLUDE).
+/// 코트는 시설이 배정한다(코트 슬롯은 잡지 않음).
+model LessonBooking {
+  id            String        @id @default(cuid())
+  bookingNo     String        @unique @map("booking_no")
+  coachId       String        @map("coach_id")
+  facilityId    String        @map("facility_id")
+  userId        String        @map("user_id")
+  startAt       DateTime      @map("start_at") @db.Timestamptz(6)
+  endAt         DateTime      @map("end_at") @db.Timestamptz(6)
+  amount        Int
+  status        BookingStatus
+  holdExpiresAt DateTime?     @map("hold_expires_at") @db.Timestamptz(6)
+  cancelledAt   DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason  String?       @map("cancel_reason")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  coach    Coach     @relation(fields: [coachId], references: [id])
+  facility Facility  @relation(fields: [facilityId], references: [id])
+  user     User      @relation(fields: [userId], references: [id])
+  payments Payment[]
+
+  @@index([coachId, startAt])
+  @@index([userId, startAt])
+  @@map("lesson_bookings")
+}
+
+/// 시설 공지사항 (이용자 홈).
+model Announcement {
+  id         String   @id @default(cuid())
+  facilityId String   @map("facility_id")
+  title      String
+  body       String
+  isUrgent   Boolean  @default(false) @map("is_urgent")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId, createdAt])
+  @@map("announcements")
 }

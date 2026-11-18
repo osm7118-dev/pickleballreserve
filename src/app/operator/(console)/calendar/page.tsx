@@ -67,7 +67,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       maxFree += 30;
     }
   }
-  const durations = Array.from({ length: Math.min(maxFree, 240) / 30 }, (_, i) => (i + 1) * 30);
+  const durations = Array.from({ length: Math.floor(Math.min(maxFree, 240) / 60) }, (_, i) => (i + 1) * 60);
   const err = sp.err ? (isBookingErrorCode(sp.err) ? BOOKING_ERRORS[sp.err] : ERRORS[sp.err] ?? "처리하지 못했어요.") : null;
 
   return (
@@ -78,14 +78,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <p className="text-[14px] text-muted">빈 칸을 누르면 수동 예약·차단, 예약을 누르면 취소·노쇼 처리를 할 수 있어요.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/operator/calendar?date=${addDays(date, -1)}`} className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-line-strong bg-surface" aria-label="이전 날">
+          <Link href={`/operator/calendar?date=${addDays(date, -1)}`} className="flex h-11 w-11 items-center justify-center border border-line-strong bg-surface" aria-label="이전 날">
             ‹
           </Link>
           <span className="tabular min-w-36 text-center text-[17px] font-bold">{dateLabel(date)}</span>
-          <Link href={`/operator/calendar?date=${addDays(date, 1)}`} className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-line-strong bg-surface" aria-label="다음 날">
+          <Link href={`/operator/calendar?date=${addDays(date, 1)}`} className="flex h-11 w-11 items-center justify-center border border-line-strong bg-surface" aria-label="다음 날">
             ›
           </Link>
-          <Link href="/operator/calendar" className="flex h-11 items-center rounded-[12px] border border-line-strong bg-surface px-4 text-[14px] font-semibold">
+          <Link href="/operator/calendar" className="flex h-11 items-center border border-line-strong bg-surface px-4 text-[14px] font-semibold">
             오늘
           </Link>
         </div>
@@ -97,6 +97,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       <div className="flex flex-wrap gap-4 text-[13px] text-muted">
         <Legend cls="bg-primary" text="앱 예약" />
         <Legend cls="bg-accent border border-accent-line" text="수동 예약" />
+        <Legend cls="bg-ink" text="오픈플레이" />
         <Legend cls="bg-primary-soft border border-primary/30" text="결제 대기" />
         <Legend cls="bg-danger-bg border border-danger/40" text="노쇼" />
         <Legend cls="hatch border border-line-strong" text="차단" />
@@ -111,7 +112,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               className="grid min-w-[560px] gap-x-1.5"
               style={{
                 gridTemplateColumns: `52px repeat(${day.courts.length}, minmax(110px, 1fr))`,
-                gridTemplateRows: `32px repeat(${rows.length}, 34px)`,
+                gridTemplateRows: `32px repeat(${rows.length}, 26px)`,
               }}
             >
               {day.courts.map((c, ci) => (
@@ -126,17 +127,19 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               ))}
               {day.courts.map((c, ci) =>
                 rows.map((m, ri) => {
-                  if (blocksOf(c).some((b) => b.start <= m && m < b.end)) return null;
-                  const past = kstAt(date, m + 30).getTime() <= now.getTime();
+                  // 빈 칸은 1시간 단위 (그리드 행은 30분 2칸)
+                  if (m % 60 !== 0 || m + 60 > close) return null;
+                  if (blocksOf(c).some((b) => b.start < m + 60 && m < b.end)) return null;
+                  const past = kstAt(date, m + 60).getTime() <= now.getTime();
                   const active = selCourt?.id === c.id && selMinute === m;
                   return past ? (
-                    <div key={`${c.id}-${m}`} style={{ gridColumn: ci + 2, gridRow: ri + 2 }} className="border-t border-line bg-bg/60" />
+                    <div key={`${c.id}-${m}`} style={{ gridColumn: ci + 2, gridRow: `${ri + 2} / span 2` }} className="border-t border-line bg-bg/60" />
                   ) : (
                     <Link
                       key={`${c.id}-${m}`}
                       href={`/operator/calendar?date=${date}&court=${c.id}&m=${m}`}
                       scroll={false}
-                      style={{ gridColumn: ci + 2, gridRow: ri + 2 }}
+                      style={{ gridColumn: ci + 2, gridRow: `${ri + 2} / span 2` }}
                       className={`border-t border-line hover:bg-primary-soft ${active ? "bg-primary-soft ring-2 ring-primary ring-inset" : ""}`}
                       aria-label={`${c.name} ${minuteLabel(m)} 빈 칸`}
                     />
@@ -157,7 +160,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                           href={`/operator/calendar?date=${date}&bo=${b.id}`}
                           scroll={false}
                           style={style}
-                          className="hatch my-0.5 rounded-[8px] border border-line-strong px-2 py-1 text-[12px] font-semibold text-muted"
+                          className="hatch my-0.5 border border-line-strong px-2 py-1 text-[12px] font-semibold text-muted"
                         >
                           차단{b.reason ? ` · ${b.reason}` : ""}
                         </Link>
@@ -171,7 +174,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                           ? "bg-primary-soft text-primary-hover border border-primary/30"
                           : bk.source === "manual"
                             ? "bg-accent text-ink border border-accent-line"
-                            : "bg-primary text-white";
+                            : bk.source === "open_play"
+                              ? "bg-ink text-white"
+                              : "bg-primary text-white";
                     const active = sp.b === bk.id;
                     return (
                       <Link
@@ -179,7 +184,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                         href={`/operator/calendar?date=${date}&b=${bk.id}`}
                         scroll={false}
                         style={style}
-                        className={`my-0.5 overflow-hidden rounded-[8px] px-2 py-1 text-[12px] leading-tight ${tone} ${active ? "ring-2 ring-ink" : ""}`}
+                        className={`my-0.5 overflow-hidden px-2 py-1 text-[12px] leading-tight ${tone} ${active ? "ring-2 ring-ink" : ""}`}
                       >
                         <span className="block truncate font-bold">{bk.name}</span>
                         <span className="tabular block truncate opacity-85">
@@ -212,7 +217,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               <form action={deleteBlackoutAction}>
                 <input type="hidden" name="blackoutId" value={selBlackout.id} />
                 <input type="hidden" name="date" value={date} />
-                <button className="h-11 w-full rounded-[12px] border border-line-strong font-semibold hover:bg-bg">차단 풀기</button>
+                <button className="h-11 w-full border border-line-strong font-semibold hover:bg-bg">차단 풀기</button>
               </form>
             </div>
           ) : selCourt && durations.length > 0 ? (
@@ -229,13 +234,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                 <input type="hidden" name="date" value={date} />
                 <input type="hidden" name="start" value={selMinute} />
                 <Field label="예약자 이름">
-                  <input name="guestName" required maxLength={40} className="h-11 w-full rounded-[10px] border border-line-strong px-3" placeholder="홍길동" />
+                  <input name="guestName" required maxLength={40} className="h-11 w-full border border-line-strong px-3" placeholder="홍길동" />
                 </Field>
                 <Field label="전화번호 (선택)">
-                  <input name="guestPhone" inputMode="tel" className="h-11 w-full rounded-[10px] border border-line-strong px-3" placeholder="010-1234-5678" />
+                  <input name="guestPhone" inputMode="tel" className="h-11 w-full border border-line-strong px-3" placeholder="010-1234-5678" />
                 </Field>
                 <Field label="이용 시간">
-                  <select name="minutes" defaultValue={Math.min(60, maxFree)} className="h-11 w-full rounded-[10px] border border-line-strong px-3">
+                  <select name="minutes" defaultValue={Math.min(60, maxFree)} className="h-11 w-full border border-line-strong px-3">
                     {durations.map((d) => (
                       <option key={d} value={d}>
                         {durationLabel(d)} ({minuteLabel(selMinute)}~{minuteLabel(selMinute + d)})
@@ -243,7 +248,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                     ))}
                   </select>
                 </Field>
-                <button className="h-12 w-full rounded-[12px] bg-primary font-bold text-white hover:bg-primary-hover">예약 등록</button>
+                <button className="h-12 w-full bg-primary font-bold text-white hover:bg-primary-hover">예약 등록</button>
               </form>
               <form action={blackoutAction} className="space-y-3 border-t border-line pt-5">
                 <h3 className="text-[16px] font-bold">시간 차단</h3>
@@ -251,20 +256,20 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                 <input type="hidden" name="date" value={date} />
                 <input type="hidden" name="start" value={selMinute} />
                 <div className="grid grid-cols-2 gap-2">
-                  <select name="minutes" defaultValue={Math.min(60, maxFree)} className="h-11 rounded-[10px] border border-line-strong px-2">
+                  <select name="minutes" defaultValue={Math.min(60, maxFree)} className="h-11 border border-line-strong px-2">
                     {durations.map((d) => (
                       <option key={d} value={d}>
                         {durationLabel(d)}
                       </option>
                     ))}
                   </select>
-                  <select name="scope" className="h-11 rounded-[10px] border border-line-strong px-2">
+                  <select name="scope" className="h-11 border border-line-strong px-2">
                     <option value="court">이 코트만</option>
                     <option value="all">시설 전체</option>
                   </select>
                 </div>
-                <input name="reason" maxLength={100} className="h-11 w-full rounded-[10px] border border-line-strong px-3" placeholder="사유 (예: 대관, 보수)" />
-                <button className="h-11 w-full rounded-[12px] border border-line-strong font-semibold hover:bg-bg">차단하기</button>
+                <input name="reason" maxLength={100} className="h-11 w-full border border-line-strong px-3" placeholder="사유 (예: 대관, 보수)" />
+                <button className="h-11 w-full border border-line-strong font-semibold hover:bg-bg">차단하기</button>
               </form>
             </div>
           ) : (
@@ -330,7 +335,7 @@ function BookingPanel({ booking: b, date, today, now }: { booking: PanelBooking;
           <form action={operatorCancelAction}>
             <input type="hidden" name="bookingId" value={b.id} />
             <input type="hidden" name="date" value={date} />
-            <button className="h-12 w-full rounded-[12px] border border-danger font-bold text-danger hover:bg-danger-bg">
+            <button className="h-12 w-full border border-danger font-bold text-danger hover:bg-danger-bg">
               예약 취소 {paid ? `(${formatWon(paid.amount)} 전액 환불)` : ""}
             </button>
           </form>
@@ -339,7 +344,7 @@ function BookingPanel({ booking: b, date, today, now }: { booking: PanelBooking;
             <input type="hidden" name="date" value={date} />
             <button
               disabled={!canNoShow}
-              className="h-12 w-full rounded-[12px] bg-danger font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slot-booked disabled:text-muted-2"
+              className="h-12 w-full bg-danger font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slot-booked disabled:text-muted-2"
             >
               노쇼 처리
             </button>
@@ -363,7 +368,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Legend({ cls, text }: { cls: string; text: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <span className={`inline-block h-3.5 w-3.5 rounded-[4px] ${cls}`} /> {text}
+      <span className={`inline-block h-3.5 w-3.5 ${cls}`} /> {text}
     </span>
   );
 }

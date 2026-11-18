@@ -9,7 +9,12 @@ export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user || !orderId) return NextResponse.redirect(new URL("/bookings", url));
   const payment = await db.payment.findUnique({ where: { orderId } });
-  if (!payment || payment.userId !== user.id || !payment.bookingId) return NextResponse.redirect(new URL("/bookings", url));
+  if (!payment || payment.userId !== user.id) return NextResponse.redirect(new URL("/bookings", url));
   await db.payment.updateMany({ where: { id: payment.id, status: "ready", tossPaymentKey: null }, data: { status: "failed" } });
-  return NextResponse.redirect(new URL(`/bookings/${payment.bookingId}/pay?error=PAYMENT_FAILED`, url));
+  const target = payment.bookingId
+    ? `/bookings/${payment.bookingId}/pay?error=PAYMENT_FAILED`
+    : payment.lessonBookingId
+      ? `/lessons/${payment.lessonBookingId}/pay?error=PAYMENT_FAILED`
+      : "/bookings";
+  return NextResponse.redirect(new URL(target, url));
 }

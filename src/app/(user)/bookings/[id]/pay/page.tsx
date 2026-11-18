@@ -7,7 +7,7 @@ import { isBookingErrorCode, BOOKING_ERRORS } from "@/server/booking/errors";
 import { HoldTimer } from "@/components/hold-timer";
 import { Notice, TopBar } from "@/components/ui";
 import { loadOwnBooking } from "../../load";
-import { PayForm } from "./form";
+import { PayForm } from "@/components/pay-form";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +42,7 @@ export default async function PayPage({
             <span className="tabular text-[22px] font-extrabold">{formatWon(b.totalAmount)}</span>
           </div>
         </div>
-        <PayForm bookingId={b.id} amountLabel={formatWon(b.totalAmount)} expiresAt={b.holdExpiresAt.toISOString()} />
+        <PayForm targetId={b.id} amountLabel={formatWon(b.totalAmount)} expiresAt={b.holdExpiresAt.toISOString()} />
       </div>
     </main>
   );

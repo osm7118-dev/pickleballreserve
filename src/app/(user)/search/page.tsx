@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 const schema = z.object({
   region: z.string().regex(/^[^|]+\|[^|]+$/),
   date: z.string().refine(isDateStr),
-  start: z.coerce.number().int().min(0).max(1410).multipleOf(30),
-  minutes: z.coerce.number().int().min(30).max(240).multipleOf(30),
+  start: z.coerce.number().int().min(0).max(1380).multipleOf(60),
+  minutes: z.coerce.number().int().min(60).max(240).multipleOf(60),
 });
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
@@ -21,7 +21,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   if (!parsed.success) {
     return (
       <main>
-        <TopBar title="검색 결과" back="/" />
+        <TopBar title="검색 결과" back="/clubs" />
         <p className="p-5 text-muted">검색 조건을 다시 골라 주세요.</p>
       </main>
     );
@@ -33,7 +33,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="pb-10">
-      <TopBar title="검색 결과" back="/" />
+      <TopBar title="검색 결과" back="/clubs" />
       <div className="border-b border-line bg-surface px-5 py-3 text-[14px] font-semibold">
         <span className="tabular">
           {sido} {sigungu} · {dateLabel(date)} · {minuteLabel(start)}~{minuteLabel(end)} ({durationLabel(minutes)})

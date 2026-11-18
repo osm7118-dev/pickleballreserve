@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 export const BOOKING_ERRORS = {
   FACILITY_UNAVAILABLE: "지금은 예약할 수 없는 시설이에요.",
   COURT_UNAVAILABLE: "지금은 예약할 수 없는 코트예요.",
-  INVALID_TIME: "30분 단위로 시간을 골라 주세요.",
+  INVALID_TIME: "1시간 단위로 시간을 골라 주세요.",
   PAST: "이미 지난 시간이에요.",
   OUTSIDE_HOURS: "운영시간 밖의 시간이에요.",
   BLACKED_OUT: "시설 사정으로 예약을 받지 않는 시간이에요.",
@@ -18,6 +18,10 @@ export const BOOKING_ERRORS = {
   NOT_CANCELLABLE: "취소할 수 없는 예약이에요.",
   AMOUNT_MISMATCH: "결제 금액이 예약 금액과 달라 결제를 진행하지 않았어요.",
   FORBIDDEN: "권한이 없어요.",
+  FULL: "정원이 다 찼어요.",
+  ALREADY_JOINED: "이미 참가 신청한 세션이에요.",
+  SESSION_CLOSED: "신청을 받지 않는 세션이에요.",
+  COACH_UNAVAILABLE: "코치가 레슨하지 않는 시간이에요.",
 } as const;
 
 export type BookingErrorCode = keyof typeof BOOKING_ERRORS;
@@ -31,6 +35,12 @@ export class BookingError extends Error {
 
 export function isBookingErrorCode(value: string): value is BookingErrorCode {
   return value in BOOKING_ERRORS;
+}
+
+/** lesson_bookings EXCLUDE(코치 시간 겹침) 위반인지 (Postgres 23P01) */
+export function isExclusionViolation(e: unknown): boolean {
+  const text = e instanceof Error ? e.message : String(e);
+  return text.includes("23P01") || text.includes("lesson_bookings_no_overlap") || text.includes("exclusion constraint");
 }
 
 /** booking_slots UNIQUE(court_id, slot_start) 위반인지 */

@@ -22,7 +22,7 @@ export default async function OperatorStartPage() {
 
         {user ? (
           <div className="mt-6 space-y-3">
-            <p className="rounded-[12px] bg-warn-bg px-4 py-3 text-[14px] text-warn-ink">
+            <p className=" bg-warn-bg px-4 py-3 text-[14px] text-warn-ink">
               {user.name ?? "회원"}님 계정에는 관리 중인 시설이 없어요. 입점 신청 화면은 다음 단계에서 열려요.
             </p>
             <form action={logoutAction}>
@@ -34,7 +34,7 @@ export default async function OperatorStartPage() {
             <button
               type="button"
               disabled
-              className="flex h-[54px] w-full items-center justify-center rounded-[14px] bg-[#FEE500] text-[16px] font-bold text-[#191919] opacity-50"
+              className="flex h-[54px] w-full items-center justify-center bg-[#FEE500] text-[16px] font-bold text-[#191919] opacity-50"
             >
               카카오로 시작하기
             </button>

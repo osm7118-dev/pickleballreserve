@@ -82,7 +82,7 @@ export default async function BookingDetailPage({
             <h3 className="text-[17px] font-bold">취소</h3>
             {quote.cancellable ? (
               <>
-                <div className="rounded-[12px] bg-bg px-4 py-3">
+                <div className=" bg-bg px-4 py-3">
                   <p className="text-[13px] font-semibold text-muted">지금 취소하면 ({quote.refundPercent}% 환불)</p>
                   <p className={`tabular text-[22px] font-extrabold ${quote.refundAmount === 0 ? "text-danger" : ""}`}>
                     {formatWon(quote.refundAmount)} 돌려받아요

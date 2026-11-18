@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatWon } from "@/lib/money";
 import { addDays, durationLabel, formatKst, isDateStr, kstAt, minuteLabel, todayKst } from "@/lib/time";
-import { cellState, getFacilityDay } from "@/server/booking/schedule";
+import { getFacilityDay, hourCellState, hourRows, rangePrice } from "@/server/booking/schedule";
 import { policyOf } from "@/server/booking/policy";
 import { Notice, TopBar } from "@/components/ui";
 import { IconClock, IconPin } from "@/components/icons";
@@ -44,19 +44,16 @@ export default async function FacilityPage({
 
   const now = new Date();
   const day = await getFacilityDay(facility.id, date, now);
-  const rows: number[] = [];
-  if (day.openMinute !== null && day.closeMinute !== null) {
-    for (let m = day.openMinute; m < day.closeMinute; m += 30) rows.push(m);
-  }
-  const states = Object.fromEntries(day.courts.map((c) => [c.id, rows.map((m) => cellState(day, c, m, now))]));
-  const prices = rows.map((m) => day.prices[m] ?? null);
+  const rows = hourRows(day);
+  const states = Object.fromEntries(day.courts.map((c) => [c.id, rows.map((m) => hourCellState(day, c, m, now))]));
+  const prices = rows.map((m) => rangePrice(day, m, m + 60));
 
   const start = Number(sp.start);
   const end = Number(sp.end);
   let initial: { courtId: string; start: number; end: number } | null = null;
   if (Number.isInteger(start) && Number.isInteger(end) && end > start) {
     const s0 = rows.indexOf(start);
-    const len = (end - start) / 30;
+    const len = (end - start) / 60;
     const free = (courtId: string) =>
       s0 >= 0 && Array.from({ length: len }, (_, i) => states[courtId]?.[s0 + i]).every((st) => st === "open");
     const courtId = sp.court && states[sp.court] ? sp.court : day.courts.find((c) => free(c.id))?.id;
@@ -101,7 +98,7 @@ export default async function FacilityPage({
           </ul>
         </div>
         <div className="card p-5">
-          <h3 className="mb-2 text-[17px] font-bold">가격 (30분당)</h3>
+          <h3 className="mb-2 text-[17px] font-bold">가격 (1시간당)</h3>
           <ul className="tabular space-y-1 text-[14px]">
             {facility.priceRules
               .filter((r) => r.dayType !== "holiday")
@@ -110,7 +107,7 @@ export default async function FacilityPage({
                   <span className="text-muted">
                     {r.dayType === "weekday" ? "평일" : "주말"} {minuteLabel(r.startMinute)}~{minuteLabel(r.endMinute)}
                   </span>
-                  <b>{formatWon(r.pricePer30min)}</b>
+                  <b>{formatWon(r.pricePer30min * 2)}</b>
                 </li>
               ))}
           </ul>
@@ -139,7 +136,7 @@ export default async function FacilityPage({
               key={d}
               href={`/facilities/${facility.id}?date=${d}`}
               scroll={false}
-              className={`flex h-16 w-12 shrink-0 flex-col items-center justify-center rounded-[12px] text-[13px] font-semibold ${
+              className={`flex h-16 w-12 shrink-0 flex-col items-center justify-center text-[13px] font-semibold ${
                 active ? "bg-ink text-white" : "border border-line bg-surface"
               } ${!active && (wd === 0 || wd === 6) ? "text-danger" : ""}`}
             >

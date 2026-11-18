@@ -75,7 +75,9 @@ describe("holdBooking — PRD 4장 검증 1~7단계", () => {
     const { f, court, user } = await setup();
     const base = { userId: user.id, facilityId: f.id, courtId: court.id, date: DATE };
     expect(await code(holdBooking({ ...base, startMinute: h(19, 15), endMinute: h(20, 15) }, NOW))).toBe("INVALID_TIME");
-    expect(await code(holdBooking({ ...base, startMinute: h(22), endMinute: h(23, 30) }, NOW))).toBe("OUTSIDE_HOURS");
+    // 예약 단위는 1시간: 30분 경계여도 정시가 아니면 거절
+    expect(await code(holdBooking({ ...base, startMinute: h(19, 30), endMinute: h(20, 30) }, NOW))).toBe("INVALID_TIME");
+    expect(await code(holdBooking({ ...base, startMinute: h(22), endMinute: h(24) }, NOW))).toBe("OUTSIDE_HOURS");
     expect(await code(holdBooking({ ...base, date: "2026-12-01", startMinute: h(7), endMinute: h(8) }, NOW))).toBe("PAST");
     await db.blackout.create({ data: { facilityId: f.id, courtId: null, startAt: kstAt(DATE, h(19, 30)), endAt: kstAt(DATE, h(20)) } });
     expect(await code(holdBooking({ ...base, startMinute: h(19), endMinute: h(20) }, NOW))).toBe("BLACKED_OUT");
@@ -84,8 +86,9 @@ describe("holdBooking — PRD 4장 검증 1~7단계", () => {
   it("step 2: enforces min/max minutes per booking", async () => {
     const { f, court, user } = await setup();
     const base = { userId: user.id, facilityId: f.id, courtId: court.id, date: DATE };
-    expect(await code(holdBooking({ ...base, startMinute: h(19), endMinute: h(19, 30) }, NOW))).toBe("DURATION");
-    expect(await code(holdBooking({ ...base, startMinute: h(19), endMinute: h(21, 30) }, NOW))).toBe("DURATION");
+    await db.bookingPolicy.update({ where: { facilityId: f.id }, data: { minMinutesPerBooking: 120, maxMinutesPerBooking: 120 } });
+    expect(await code(holdBooking({ ...base, startMinute: h(19), endMinute: h(20) }, NOW))).toBe("DURATION");
+    expect(await code(holdBooking({ ...base, startMinute: h(19), endMinute: h(22) }, NOW))).toBe("DURATION");
   });
 
   it("step 3: only within advance_days", async () => {
@@ -97,7 +100,7 @@ describe("holdBooking — PRD 4장 검증 1~7단계", () => {
 
   it("step 4: caps a user's minutes per facility per KST day (confirmed + live held)", async () => {
     const { f, court, court2, user } = await setup();
-    await holdBooking({ userId: user.id, facilityId: f.id, courtId: court.id, date: DATE, startMinute: h(9), endMinute: h(10, 30) }, NOW);
+    await holdBooking({ userId: user.id, facilityId: f.id, courtId: court.id, date: DATE, startMinute: h(9), endMinute: h(11) }, NOW);
     expect(
       await code(holdBooking({ userId: user.id, facilityId: f.id, courtId: court2.id, date: DATE, startMinute: h(19), endMinute: h(20) }, NOW)),
     ).toBe("DAILY_LIMIT");
@@ -125,10 +128,10 @@ describe("holdBooking — PRD 4장 검증 1~7단계", () => {
     const other = await db.user.create({ data: { kakaoId: "other", phone: "01033334444" } });
     await holdBooking({ userId: user.id, facilityId: f.id, courtId: court.id, date: DATE, startMinute: h(19), endMinute: h(20) }, NOW);
     expect(
-      await code(holdBooking({ userId: other.id, facilityId: f.id, courtId: court.id, date: DATE, startMinute: h(19, 30), endMinute: h(20, 30) }, NOW)),
+      await code(holdBooking({ userId: other.id, facilityId: f.id, courtId: court.id, date: DATE, startMinute: h(19), endMinute: h(21) }, NOW)),
     ).toBe("SLOT_TAKEN");
     const later = new Date(NOW.getTime() + 10 * 60_000 + 1);
-    const b = await holdBooking({ userId: other.id, facilityId: f.id, courtId: court.id, date: DATE, startMinute: h(19, 30), endMinute: h(20, 30) }, later);
+    const b = await holdBooking({ userId: other.id, facilityId: f.id, courtId: court.id, date: DATE, startMinute: h(19), endMinute: h(21) }, later);
     expect(b.status).toBe("held");
     const expired = await db.booking.findFirstOrThrow({ where: { userId: user.id } });
     expect(expired.status).toBe("cancelled");
@@ -162,7 +165,7 @@ describe("payment (mock) → confirm → cancel", () => {
   async function heldBooking() {
     const ctx = await setup();
     const b = await holdBooking(
-      { userId: ctx.user.id, facilityId: ctx.f.id, courtId: ctx.court.id, date: DATE, startMinute: h(19), endMinute: h(20, 30) },
+      { userId: ctx.user.id, facilityId: ctx.f.id, courtId: ctx.court.id, date: DATE, startMinute: h(19), endMinute: h(21) },
       NOW,
     );
     return { ...ctx, b };
@@ -171,11 +174,11 @@ describe("payment (mock) → confirm → cancel", () => {
   it("approves once (idempotent by order_id) and confirms the booking", async () => {
     const { b, user, f } = await heldBooking();
     const p = await startPayment({ bookingId: b.id, userId: user.id, now: NOW });
-    expect(p.amount).toBe(45000);
+    expect(p.amount).toBe(60000);
     expect((await startPayment({ bookingId: b.id, userId: user.id, now: NOW })).id).toBe(p.id);
     const key = mockPaymentKey("카드");
-    const first = await approvePayment({ orderId: p.orderId, paymentKey: key, amount: 45000, userId: user.id, now: NOW });
-    const second = await approvePayment({ orderId: p.orderId, paymentKey: key, amount: 45000, userId: user.id, now: NOW });
+    const first = await approvePayment({ orderId: p.orderId, paymentKey: key, amount: 60000, userId: user.id, now: NOW });
+    const second = await approvePayment({ orderId: p.orderId, paymentKey: key, amount: 60000, userId: user.id, now: NOW });
     expect(first.alreadyDone).toBe(false);
     expect(second.alreadyDone).toBe(true);
     expect((await db.booking.findUniqueOrThrow({ where: { id: b.id } })).status).toBe("confirmed");
@@ -198,7 +201,7 @@ describe("payment (mock) → confirm → cancel", () => {
     const { b, user } = await heldBooking();
     const p = await startPayment({ bookingId: b.id, userId: user.id, now: NOW });
     const late = new Date(NOW.getTime() + 10 * 60_000);
-    expect(await code(approvePayment({ orderId: p.orderId, paymentKey: mockPaymentKey("카드"), amount: 45000, userId: user.id, now: late }))).toBe(
+    expect(await code(approvePayment({ orderId: p.orderId, paymentKey: mockPaymentKey("카드"), amount: 60000, userId: user.id, now: late }))).toBe(
       "HOLD_EXPIRED",
     );
     expect((await db.payment.findUniqueOrThrow({ where: { id: p.id } })).status).toBe("ready");
@@ -207,15 +210,15 @@ describe("payment (mock) → confirm → cancel", () => {
   it("user cancel applies tiers, records a partial refund and frees the slots", async () => {
     const { b, user } = await heldBooking();
     const p = await startPayment({ bookingId: b.id, userId: user.id, now: NOW });
-    await approvePayment({ orderId: p.orderId, paymentKey: mockPaymentKey("간편결제"), amount: 45000, userId: user.id, now: NOW });
+    await approvePayment({ orderId: p.orderId, paymentKey: mockPaymentKey("간편결제"), amount: 60000, userId: user.id, now: NOW });
     // 결제 직후 grace 를 피하려고 approved_at 을 과거로 둔다. 이용(12/2 19:00 KST) 30시간 전 → 50%
     await db.payment.update({ where: { id: p.id }, data: { approvedAt: new Date("2026-11-30T00:00:00Z") } });
     const now = new Date(kstAt(DATE, h(19)).getTime() - 30 * 3600_000);
     const res = await cancelByUser({ bookingId: b.id, userId: user.id, now });
-    expect(res.refundAmount).toBe(22500);
+    expect(res.refundAmount).toBe(30000);
     expect((await db.booking.findUniqueOrThrow({ where: { id: b.id } })).status).toBe("cancelled");
     expect((await db.payment.findUniqueOrThrow({ where: { id: p.id } })).status).toBe("partial_cancelled");
-    expect(await db.refund.count({ where: { paymentId: p.id, reason: "user_cancel", amount: 22500 } })).toBe(1);
+    expect(await db.refund.count({ where: { paymentId: p.id, reason: "user_cancel", amount: 30000 } })).toBe(1);
     expect(await db.bookingSlot.count({ where: { bookingId: b.id } })).toBe(0);
     expect(await code(cancelByUser({ bookingId: b.id, userId: user.id, now }))).toBe("NOT_CANCELLABLE");
   });
@@ -223,7 +226,7 @@ describe("payment (mock) → confirm → cancel", () => {
   it("facility cancel refunds 100%; no-show only on the day", async () => {
     const { b, user, owner, f, court2 } = await heldBooking();
     const p = await startPayment({ bookingId: b.id, userId: user.id, now: NOW });
-    await approvePayment({ orderId: p.orderId, paymentKey: mockPaymentKey("카드"), amount: 45000, userId: user.id, now: NOW });
+    await approvePayment({ orderId: p.orderId, paymentKey: mockPaymentKey("카드"), amount: 60000, userId: user.id, now: NOW });
 
     expect(await code(markNoShow({ bookingId: b.id, staffUserId: owner.id, now: NOW }))).toBe("NOT_CANCELLABLE");
     expect(await code(cancelByFacility({ bookingId: b.id, staffUserId: user.id, now: NOW }))).toBe("FORBIDDEN");
@@ -279,8 +282,8 @@ describe("operator manual booking & search", () => {
 
   it("search returns facilities with at least one fully free court", async () => {
     const { f, court, court2, owner } = await setup();
-    const q = { sido: "서울", sigungu: "성동구", date: DATE, startMinute: h(19), minutes: 90 };
-    expect((await searchFacilities(q, NOW))[0]).toMatchObject({ facilityId: f.id, freeCourts: 2, price: 45000 });
+    const q = { sido: "서울", sigungu: "성동구", date: DATE, startMinute: h(19), minutes: 120 };
+    expect((await searchFacilities(q, NOW))[0]).toMatchObject({ facilityId: f.id, freeCourts: 2, price: 60000 });
     for (const c of [court, court2]) {
       await createManualBooking({
         staffUserId: owner.id, facilityId: f.id, courtId: c.id, date: DATE,
