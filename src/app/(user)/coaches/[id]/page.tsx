@@ -66,7 +66,7 @@ export default async function CoachPage({
               key={d}
               href={`/coaches/${coach.id}?date=${d}`}
               scroll={false}
-              className={`flex h-16 w-12 shrink-0 flex-col items-center justify-center rounded-[12px] text-[13px] font-semibold ${
+              className={`flex h-16 w-12 shrink-0 flex-col items-center justify-center text-[13px] font-semibold ${
                 active ? "bg-ink text-white" : "border border-line bg-surface"
               } ${!active && (wd === 0 || wd === 6) ? "text-danger" : ""}`}
             >

@@ -1,6 +1,7 @@
-// Development sample data: one approved facility in 서울 성동구 with 4 courts,
+// Development sample data: 피클존 (PickleZone, 서울 영등포구) with 1 court,
 // operating hours, price table, booking policy and the PRD default cancellation tiers.
-// Safe to run repeatedly (fixed ids + upsert).
+// Safe to run repeatedly (fixed ids + upsert). The facility id stays "seed-facility-seongsu"
+// so existing sessions and cookies keep working after the rename.
 import { PrismaClient, type DayType } from "@prisma/client";
 
 const db = new PrismaClient();
@@ -9,6 +10,8 @@ const FACILITY_ID = "seed-facility-seongsu";
 const OWNER_ID = "seed-user-owner";
 const ADMIN_ID = "seed-user-admin";
 const CUSTOMER_ID = "seed-user-customer";
+
+const COURT_NAME = "A코트";
 
 const h = (hour: number, minute = 0) => hour * 60 + minute;
 
@@ -20,8 +23,8 @@ async function main() {
   });
   await db.user.upsert({
     where: { id: OWNER_ID },
-    update: {},
-    create: { id: OWNER_ID, kakaoId: "seed-kakao-owner", name: "성수 피클볼 사장님", phone: "01000000000" },
+    update: { name: "피클존 사장님" },
+    create: { id: OWNER_ID, kakaoId: "seed-kakao-owner", name: "피클존 사장님", phone: "01000000000" },
   });
 
   // 테스트 고객: 휴대폰 번호가 비어 있어 첫 로그인 때 U02(추가 정보·약관)를 거친다.
@@ -31,26 +34,30 @@ async function main() {
     create: { id: CUSTOMER_ID, kakaoId: "seed-kakao-customer", name: "테스트 고객" },
   });
 
+  // 실제 매장 피클존(PickleZone) 이름·주소로 표시한다. 전화·가격·운영시간은 샘플 값이다.
+  const info = {
+    name: "피클존 PickleZone",
+    address: "서울 영등포구 도신로 73 지하1층",
+    regionSido: "서울",
+    regionSigungu: "영등포구",
+    lat: 37.5138,
+    lng: 126.9089,
+    description: "피클볼 전용 실내 코트 (샘플 데이터)",
+  };
   await db.facility.upsert({
     where: { id: FACILITY_ID },
-    update: {},
+    update: info,
     create: {
       id: FACILITY_ID,
-      name: "성수 인도어 피클볼",
-      address: "서울 성동구 성수이로 00",
-      regionSido: "서울",
-      regionSigungu: "성동구",
-      lat: 37.5446,
-      lng: 127.0559,
+      ...info,
       phone: "0200000000",
-      description: "개발용 샘플 시설입니다.",
       amenities: ["주차", "샤워실", "라켓 대여"],
       status: "approved",
       approvedAt: new Date(),
       approvedById: ADMIN_ID,
       staff: { create: { userId: OWNER_ID, role: "owner" } },
       courts: {
-        create: ["A코트", "B코트", "C코트", "D코트"].map((name, i) => ({
+        create: [COURT_NAME].map((name, i) => ({
           name,
           surface: "우레탄",
           sortOrder: i,
@@ -92,7 +99,16 @@ async function main() {
     },
   });
 
+  // 코트 1면: 예전 시드의 B~D코트는 지우지 않고(예약 이력 보존) 비활성으로 돌린다.
+  await db.court.upsert({
+    where: { facilityId_name: { facilityId: FACILITY_ID, name: COURT_NAME } },
+    update: { isActive: true },
+    create: { facilityId: FACILITY_ID, name: COURT_NAME, surface: "우레탄", sortOrder: 0 },
+  });
+  await db.court.updateMany({ where: { facilityId: FACILITY_ID, name: { not: COURT_NAME } }, data: { isActive: false } });
+
   await seedSecondFacility();
+  await seedPlayers();
   await seedCoaches();
   await seedAnnouncements();
   await seedSampleBookings();
@@ -209,8 +225,8 @@ async function seedAnnouncements() {
     {
       id: "seed-notice-2",
       facilityId: FACILITY_ID,
-      title: "C코트 바닥 보수 안내",
-      body: "11월 25일(화) 오전 7~10시 C코트 바닥 보수가 있어요. 해당 시간은 예약을 받지 않습니다.",
+      title: "코트 바닥 보수 안내",
+      body: "11월 25일(화) 오전 7~10시 코트 바닥 보수가 있어요. 해당 시간은 예약을 받지 않습니다.",
       isUrgent: false,
     },
     {
@@ -222,48 +238,100 @@ async function seedAnnouncements() {
     },
   ];
   for (const n of items) {
-    await db.announcement.upsert({ where: { id: n.id }, update: {}, create: n });
+    await db.announcement.upsert({ where: { id: n.id }, update: { title: n.title, body: n.body }, create: n });
   }
 }
 
-// 오픈플레이 세션: 코트마다 booking(source=open_play) 1건으로 코트를 잡는다. 세션이 하나도 없을 때만.
+// 오픈플레이 참가자로 쓰는 샘플 회원
+const PLAYERS = ["김도윤", "이서준", "박하은", "최지우", "정민재", "강예린", "조현우", "윤소희", "장태민", "임수아", "한지성", "오유진"];
+const playerId = (i: number) => `seed-player-${i + 1}`;
+
+async function seedPlayers() {
+  for (const [i, name] of PLAYERS.entries()) {
+    await db.user.upsert({
+      where: { id: playerId(i) },
+      update: {},
+      create: { id: playerId(i), kakaoId: `seed-kakao-player-${i + 1}`, name, phone: `0101111${String(1000 + i)}` },
+    });
+  }
+}
+
+// 오픈플레이 세션: 코트 1면을 booking(source=open_play) 1건으로 잡고, 샘플 회원이 결제·참가한 상태로 만든다.
+// 앞으로 열릴 세션이 하나도 없을 때만 새로 만든다(배포마다 시드가 돌아 지난 세션이 채워진다).
 async function seedOpenPlay() {
-  if ((await db.openPlaySession.count({ where: { facilityId: FACILITY_ID } })) > 0) return;
-  const courts = await db.court.findMany({ where: { facilityId: FACILITY_ID }, orderBy: { sortOrder: "asc" } });
+  const now = new Date();
+  const active = await db.court.findMany({ where: { facilityId: FACILITY_ID, isActive: true }, orderBy: { sortOrder: "asc" } });
+  const activeIds = new Set(active.map((c) => c.id));
+
+  // 예전 시드가 비활성 코트에 만든 세션은 취소한다(코트 1면으로 바뀜).
+  const stale = await db.openPlaySession.findMany({ where: { facilityId: FACILITY_ID, status: "open", startAt: { gt: now } } });
+  for (const st of stale.filter((x) => x.courtIds.some((id) => !activeIds.has(id)))) {
+    await db.$transaction(async (tx) => {
+      const bookings = await tx.booking.findMany({ where: { openPlaySessionId: st.id }, select: { id: true } });
+      await tx.bookingSlot.deleteMany({ where: { bookingId: { in: bookings.map((b) => b.id) } } });
+      await tx.booking.updateMany({ where: { openPlaySessionId: st.id }, data: { status: "cancelled", cancelledAt: now, cancelReason: "코트 변경" } });
+      // 데모용 테스트 결제(Mock)만 있으므로 참가·결제도 함께 취소 처리한다.
+      const joined = await tx.openPlayParticipant.findMany({ where: { sessionId: st.id, status: "joined" } });
+      await tx.openPlayParticipant.updateMany({ where: { sessionId: st.id }, data: { status: "cancelled" } });
+      await tx.payment.updateMany({
+        where: { id: { in: joined.map((p) => p.paymentId).filter((x): x is string => !!x) }, status: "done" },
+        data: { status: "cancelled" },
+      });
+      await tx.openPlaySession.update({ where: { id: st.id }, data: { status: "cancelled" } });
+    });
+  }
+
+  const upcoming = await db.openPlaySession.count({ where: { facilityId: FACILITY_ID, status: "open", startAt: { gt: now } } });
+  if (upcoming > 0 || active.length === 0) return;
+  const courtId = active[0].id;
   const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   const at = (dayOffset: number, minute: number) =>
     new Date(new Date(`${todayKst}T00:00:00+09:00`).getTime() + dayOffset * 86400_000 + minute * 60_000);
   const sessions = [
-    { day: 1, start: h(10), end: h(12), title: "오전 오픈플레이 (초급)", capacity: 12, fee: 10000, courts: [2, 3] },
-    { day: 2, start: h(20), end: h(22), title: "나이트 오픈플레이 (중급)", capacity: 8, fee: 15000, courts: [3] },
-    { day: 4, start: h(9), end: h(11), title: "모닝 오픈플레이 (전 레벨)", capacity: 16, fee: 12000, courts: [0, 1] },
+    { day: 1, start: h(10), end: h(12), title: "오전 오픈플레이 (초급)", capacity: 8, fee: 10000, joined: 6 },
+    { day: 2, start: h(20), end: h(22), title: "나이트 오픈플레이 (중급)", capacity: 8, fee: 15000, joined: 8 },
+    { day: 3, start: h(19), end: h(21), title: "퇴근 후 오픈플레이 (초·중급)", capacity: 10, fee: 12000, joined: 7 },
+    { day: 4, start: h(9), end: h(11), title: "모닝 오픈플레이 (전 레벨)", capacity: 12, fee: 12000, joined: 9 },
+    { day: 6, start: h(14), end: h(16), title: "주말 오픈플레이 (전 레벨)", capacity: 12, fee: 15000, joined: 11 },
   ];
   for (const s of sessions) {
     const startAt = at(s.day, s.start);
     const endAt = at(s.day, s.end);
-    const courtIds = s.courts.map((i) => courts[i].id);
     const slots: Date[] = [];
     for (let t = startAt.getTime(); t < endAt.getTime(); t += 30 * 60_000) slots.push(new Date(t));
     try {
       await db.$transaction(async (tx) => {
         const session = await tx.openPlaySession.create({
-          data: { facilityId: FACILITY_ID, courtIds, title: s.title, startAt, endAt, capacity: s.capacity, fee: s.fee },
+          data: { facilityId: FACILITY_ID, courtIds: [courtId], title: s.title, startAt, endAt, capacity: s.capacity, fee: s.fee },
         });
-        for (const courtId of courtIds) {
-          await tx.booking.create({
+        await tx.booking.create({
+          data: {
+            bookingNo: `PB-OP-${session.id.slice(-6)}-${courtId.slice(-4)}`,
+            facilityId: FACILITY_ID,
+            courtId,
+            startAt,
+            endAt,
+            totalAmount: 0,
+            status: "confirmed",
+            source: "open_play",
+            openPlaySessionId: session.id,
+            slots: { create: slots.map((slotStart) => ({ courtId, slotStart })) },
+          },
+        });
+        for (let i = 0; i < s.joined; i++) {
+          const participant = await tx.openPlayParticipant.create({ data: { sessionId: session.id, userId: playerId(i) } });
+          const payment = await tx.payment.create({
             data: {
-              bookingNo: `PB-OP-${session.id.slice(-6)}-${courtId.slice(-4)}`,
-              facilityId: FACILITY_ID,
-              courtId,
-              startAt,
-              endAt,
-              totalAmount: 0,
-              status: "confirmed",
-              source: "open_play",
-              openPlaySessionId: session.id,
-              slots: { create: slots.map((slotStart) => ({ courtId, slotStart })) },
+              orderId: `seed-op-${session.id}-${i + 1}`,
+              participantId: participant.id,
+              userId: playerId(i),
+              amount: s.fee,
+              method: "카드",
+              status: "done",
+              approvedAt: new Date(),
             },
           });
+          await tx.openPlayParticipant.update({ where: { id: participant.id }, data: { paymentId: payment.id } });
         }
       });
     } catch (e) {
@@ -275,15 +343,15 @@ async function seedOpenPlay() {
 // 운영자 캘린더가 비어 보이지 않도록 오늘·내일 수동 예약 몇 건. 예약이 하나도 없을 때만 넣는다.
 async function seedSampleBookings() {
   if ((await db.booking.count({ where: { facilityId: FACILITY_ID } })) > 0) return;
-  const courts = await db.court.findMany({ where: { facilityId: FACILITY_ID }, orderBy: { sortOrder: "asc" } });
+  const courts = await db.court.findMany({ where: { facilityId: FACILITY_ID, isActive: true }, orderBy: { sortOrder: "asc" } });
   const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   const at = (dayOffset: number, minute: number) =>
     new Date(new Date(`${todayKst}T00:00:00+09:00`).getTime() + dayOffset * 86400_000 + minute * 60_000);
   const samples = [
-    { day: 0, court: 0, start: h(19), end: h(20, 30), name: "김민수", phone: "01012345678" },
-    { day: 0, court: 2, start: h(20), end: h(22), name: "동호회 화요팀", phone: "01098765432" },
-    { day: 1, court: 1, start: h(18), end: h(19), name: "이서연", phone: "01055556666" },
-    { day: 1, court: 3, start: h(20, 30), end: h(21, 30), name: "박지훈", phone: null },
+    { day: 0, court: 0, start: h(19), end: h(20), name: "김민수", phone: "01012345678" },
+    { day: 0, court: 0, start: h(20), end: h(22), name: "동호회 화요팀", phone: "01098765432" },
+    { day: 1, court: 0, start: h(18), end: h(19), name: "이서연", phone: "01055556666" },
+    { day: 1, court: 0, start: h(20), end: h(21), name: "박지훈", phone: null },
   ];
   for (const [i, s] of samples.entries()) {
     const startAt = at(s.day, s.start);

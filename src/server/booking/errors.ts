@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 export const BOOKING_ERRORS = {
   FACILITY_UNAVAILABLE: "지금은 예약할 수 없는 시설이에요.",
   COURT_UNAVAILABLE: "지금은 예약할 수 없는 코트예요.",
-  INVALID_TIME: "30분 단위로 시간을 골라 주세요.",
+  INVALID_TIME: "1시간 단위로 시간을 골라 주세요.",
   PAST: "이미 지난 시간이에요.",
   OUTSIDE_HOURS: "운영시간 밖의 시간이에요.",
   BLACKED_OUT: "시설 사정으로 예약을 받지 않는 시간이에요.",

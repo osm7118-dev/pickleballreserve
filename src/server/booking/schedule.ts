@@ -1,6 +1,6 @@
 import type { BookingSource, BookingStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { SLOT_MINUTES, kstAt, kstWeekday } from "@/lib/time";
+import { BOOKING_UNIT_MINUTES, SLOT_MINUTES, kstAt, kstWeekday } from "@/lib/time";
 import { dayTypeOf, slotPrice } from "@/server/pricing";
 
 export type SlotBooking = {
@@ -134,3 +134,22 @@ export function rangePrice(day: FacilityDay, start: number, end: number): number
   return total;
 }
 
+
+/** 이용자 시간표 행: 운영시간 안의 정시(1시간 칸) 시작 분 목록 */
+export function hourRows(day: FacilityDay): number[] {
+  const rows: number[] = [];
+  if (day.openMinute === null || day.closeMinute === null) return rows;
+  const first = Math.ceil(day.openMinute / BOOKING_UNIT_MINUTES) * BOOKING_UNIT_MINUTES;
+  for (let m = first; m + BOOKING_UNIT_MINUTES <= day.closeMinute; m += BOOKING_UNIT_MINUTES) rows.push(m);
+  return rows;
+}
+
+/** 1시간 칸 상태: 안쪽 30분 슬롯 중 하나라도 예약됐으면 booked, 아니면 가장 나쁜 상태 */
+export function hourCellState(day: FacilityDay, court: CourtDay, minute: number, now: Date): CellState {
+  const states: CellState[] = [];
+  for (let m = minute; m < minute + BOOKING_UNIT_MINUTES; m += SLOT_MINUTES) states.push(cellState(day, court, m, now));
+  if (states.includes("booked")) return "booked";
+  if (states.includes("blocked")) return "blocked";
+  if (states.includes("closed")) return "closed";
+  return "open";
+}

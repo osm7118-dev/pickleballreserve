@@ -2,20 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconHome, IconTicket, IconUser } from "./icons";
+import { IconCalendar, IconHome, IconTicket, IconUser } from "./icons";
 
 const TABS = [
   { href: "/", label: "홈", Icon: IconHome, match: (p: string) => p === "/" || p.startsWith("/search") || p.startsWith("/facilities") },
+  { href: "/calendar", label: "캘린더", Icon: IconCalendar, match: (p: string) => p.startsWith("/calendar") },
   { href: "/bookings", label: "내 예약", Icon: IconTicket, match: (p: string) => p.startsWith("/bookings") },
   { href: "/me", label: "마이", Icon: IconUser, match: (p: string) => p.startsWith("/me") },
 ];
 
-/** 이용자 하단 탭: 홈 / 내 예약 / 마이 */
+/** 이용자 하단 탭: 홈 / 캘린더 / 내 예약 / 마이 */
 export function BottomTabs() {
   const path = usePathname();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30">
-      <div className="mx-auto grid max-w-[430px] grid-cols-3 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto grid max-w-[430px] grid-cols-4 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match(path);
           return (

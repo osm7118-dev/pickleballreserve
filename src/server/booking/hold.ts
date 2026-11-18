@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { addDays, isDateStr, isSlotBoundary, kstAt, kstWeekday, slotStartsOf, todayKst } from "@/lib/time";
+import { addDays, isBookingBoundary, isDateStr, kstAt, kstWeekday, slotStartsOf, todayKst } from "@/lib/time";
 import { PriceMissingError, priceForRange } from "@/server/pricing";
 import { newBookingNo } from "./booking-no";
 import { BookingError, isSlotConflict } from "./errors";
@@ -18,13 +18,13 @@ export type HoldInput = {
   endMinute: number;
 };
 
-/** 1단계 중 "30분 경계 · 운영시간 · blackout" 검사. 수동 예약도 함께 쓴다. */
+/** 1단계 중 "1시간 경계 · 운영시간 · blackout" 검사. 수동 예약도 함께 쓴다. */
 export async function checkTimeAndHours(
   tx: Tx,
   args: { facilityId: string; courtId: string; date: string; startMinute: number; endMinute: number; now: Date },
 ): Promise<{ startAt: Date; endAt: Date }> {
   const { facilityId, courtId, date, startMinute, endMinute, now } = args;
-  if (!isDateStr(date) || !isSlotBoundary(startMinute) || !isSlotBoundary(endMinute) || startMinute >= endMinute) {
+  if (!isDateStr(date) || !isBookingBoundary(startMinute) || !isBookingBoundary(endMinute) || startMinute >= endMinute) {
     throw new BookingError("INVALID_TIME");
   }
   const startAt = kstAt(date, startMinute);
@@ -89,7 +89,7 @@ export async function holdBooking(input: HoldInput, now: Date = new Date()) {
       if (!court) throw new BookingError("COURT_UNAVAILABLE");
       const policy = policyOf(facility.bookingPolicy);
 
-      // 1. 30분 경계, 운영시간 안, blackout과 겹치지 않음
+      // 1. 1시간 경계(저장은 30분 슬롯), 운영시간 안, blackout과 겹치지 않음
       const { startAt, endAt } = await checkTimeAndHours(tx, { facilityId, courtId, date, startMinute, endMinute, now });
 
       // 2. 1회 이용시간 min~max

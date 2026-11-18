@@ -62,7 +62,7 @@ export default async function DashboardPage() {
           <p className="text-[14px] font-semibold text-muted">{dateLabel(today)}</p>
           <h1 className="text-[26px] font-extrabold">오늘</h1>
         </div>
-        <Link href="/operator/calendar" className="inline-flex h-11 items-center rounded-[12px] bg-primary px-5 font-bold text-white hover:bg-primary-hover">
+        <Link href="/operator/calendar" className="inline-flex h-11 items-center bg-primary px-5 font-bold text-white hover:bg-primary-hover">
           예약 캘린더 열기
         </Link>
       </header>

@@ -34,13 +34,13 @@ export default async function ClubsPage() {
             <div className="mt-3 grid grid-cols-2 gap-2">
               <Link
                 href={`/facilities/${c.id}`}
-                className="flex h-11 items-center justify-center rounded-[12px] border border-line-strong text-[14px] font-semibold"
+                className="flex h-11 items-center justify-center border border-line-strong text-[14px] font-semibold"
               >
                 코트 시간표
               </Link>
               <form action={selectClubAction}>
                 <input type="hidden" name="facilityId" value={c.id} />
-                <button className="h-11 w-full rounded-[12px] bg-primary text-[14px] font-bold text-white hover:bg-primary-hover">
+                <button className="h-11 w-full bg-primary text-[14px] font-bold text-white hover:bg-primary-hover">
                   내 매장으로 보기
                 </button>
               </form>

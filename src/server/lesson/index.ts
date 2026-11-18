@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { SLOT_MINUTES, addDays, isDateStr, isSlotBoundary, kstAt, kstWeekday, todayKst } from "@/lib/time";
+import { BOOKING_UNIT_MINUTES, addDays, isBookingBoundary, isDateStr, kstAt, kstWeekday, todayKst } from "@/lib/time";
 import { BookingError, isExclusionViolation } from "@/server/booking/errors";
 import { newBookingNo } from "@/server/booking/booking-no";
 import { policyOf } from "@/server/booking/policy";
@@ -39,7 +39,8 @@ export async function lessonStartsFor(coachId: string, date: string, now: Date =
   });
   const starts: { minute: number; free: boolean }[] = [];
   for (const w of windows) {
-    for (let m = w.startMinute; m + coach.lessonMinutes <= w.endMinute; m += SLOT_MINUTES) {
+    const first = Math.ceil(w.startMinute / BOOKING_UNIT_MINUTES) * BOOKING_UNIT_MINUTES;
+    for (let m = first; m + coach.lessonMinutes <= w.endMinute; m += BOOKING_UNIT_MINUTES) {
       const s = kstAt(date, m);
       const e = kstAt(date, m + coach.lessonMinutes);
       if (s.getTime() <= now.getTime()) continue;
@@ -68,7 +69,7 @@ export async function holdLesson(input: { userId: string; coachId: string; date:
         include: { availabilities: true, facility: { include: { bookingPolicy: true } } },
       });
       if (!coach || !coach.isActive || coach.facility.status !== "approved") throw new BookingError("COACH_UNAVAILABLE");
-      if (!isDateStr(date) || !isSlotBoundary(startMinute)) throw new BookingError("INVALID_TIME");
+      if (!isDateStr(date) || !isBookingBoundary(startMinute)) throw new BookingError("INVALID_TIME");
       const endMinute = startMinute + coach.lessonMinutes;
       const startAt = kstAt(date, startMinute);
       const endAt = kstAt(date, endMinute);

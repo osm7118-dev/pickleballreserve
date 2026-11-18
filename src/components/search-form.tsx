@@ -4,7 +4,7 @@ import { btnPrimary } from "./ui";
 import { IconPin } from "./icons";
 
 const selectCls =
-  "h-12 w-full appearance-none rounded-[12px] border border-line-strong bg-surface px-3 text-[15px] font-semibold outline-none focus:border-primary";
+  "h-12 w-full appearance-none border border-line-strong bg-surface px-3 text-[15px] font-semibold outline-none focus:border-primary";
 
 /** U03 검색 조건 (지역·날짜·시작 시간·이용 시간) → U04 */
 export async function SearchForm() {
@@ -12,7 +12,7 @@ export async function SearchForm() {
   const today = todayKst();
   const dates = Array.from({ length: 14 }, (_, i) => addDays(today, i));
   const starts: number[] = [];
-  for (let m = 6 * 60; m <= 23 * 60; m += 30) starts.push(m);
+  for (let m = 6 * 60; m <= 23 * 60; m += 60) starts.push(m);
   return (
     <form action="/search" className="card space-y-4 p-5">
       <label className="block">
@@ -52,7 +52,7 @@ export async function SearchForm() {
         <label className="block">
           <span className="mb-1.5 block text-[13px] font-bold text-muted">이용 시간</span>
           <select name="minutes" className={selectCls} defaultValue={90}>
-            {[60, 90, 120].map((m) => (
+            {[60, 120].map((m) => (
               <option key={m} value={m}>
                 {durationLabel(m)}
               </option>

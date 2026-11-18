@@ -129,7 +129,7 @@ describe("private lessons", () => {
   it("lists start times inside availability and hides taken ones", async () => {
     const c = await coach();
     const u = await newUser();
-    expect((await lessonStartsFor(c.id, DATE, NOW)).starts.map((s) => s.minute)).toEqual([h(10), h(10, 30), h(11), h(11, 30), h(12)]);
+    expect((await lessonStartsFor(c.id, DATE, NOW)).starts.map((s) => s.minute)).toEqual([h(10), h(11), h(12)]); // 정시만
     await holdLesson({ userId: u.id, coachId: c.id, date: DATE, startMinute: h(11) }, NOW);
     const free = (await lessonStartsFor(c.id, DATE, NOW)).starts.filter((s) => s.free).map((s) => s.minute);
     expect(free).toEqual([h(10), h(12)]);
@@ -139,13 +139,14 @@ describe("private lessons", () => {
   it("rejects times outside availability and overlapping lessons (DB EXCLUDE)", async () => {
     const c = await coach();
     const [a, b] = [await newUser(), await newUser()];
-    expect(await code(holdLesson({ userId: a.id, coachId: c.id, date: DATE, startMinute: h(12, 30) }, NOW))).toBe("COACH_UNAVAILABLE");
+    expect(await code(holdLesson({ userId: a.id, coachId: c.id, date: DATE, startMinute: h(12, 30) }, NOW))).toBe("INVALID_TIME");
+    expect(await code(holdLesson({ userId: a.id, coachId: c.id, date: DATE, startMinute: h(13) }, NOW))).toBe("COACH_UNAVAILABLE");
     expect(await code(holdLesson({ userId: a.id, coachId: c.id, date: "2026-12-03", startMinute: h(10) }, NOW))).toBe("COACH_UNAVAILABLE");
     await holdLesson({ userId: a.id, coachId: c.id, date: DATE, startMinute: h(10) }, NOW);
-    expect(await code(holdLesson({ userId: b.id, coachId: c.id, date: DATE, startMinute: h(10, 30) }, NOW))).toBe("SLOT_TAKEN");
+    expect(await code(holdLesson({ userId: b.id, coachId: c.id, date: DATE, startMinute: h(10) }, NOW))).toBe("SLOT_TAKEN");
     // 선점이 만료되면 다른 사람이 잡을 수 있다
     const later = new Date(NOW.getTime() + 10 * 60_000);
-    expect(await code(holdLesson({ userId: b.id, coachId: c.id, date: DATE, startMinute: h(10, 30) }, later))).toBe("OK");
+    expect(await code(holdLesson({ userId: b.id, coachId: c.id, date: DATE, startMinute: h(10) }, later))).toBe("OK");
   });
 
   it("concurrent holds on the same coach time: exactly one wins", async () => {

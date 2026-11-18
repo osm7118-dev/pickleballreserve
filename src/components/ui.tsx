@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import { IconBack } from "./icons";
 
 export const btnPrimary =
-  "inline-flex h-[54px] w-full items-center justify-center rounded-[14px] bg-primary px-5 text-[16px] font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-slot-booked disabled:text-muted-2";
+  "inline-flex h-[54px] w-full items-center justify-center bg-primary px-5 text-[16px] font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-slot-booked disabled:text-muted-2";
 export const btnSecondary =
-  "inline-flex h-12 w-full items-center justify-center rounded-[12px] border border-line-strong bg-surface px-4 text-[15px] font-semibold text-ink transition hover:bg-bg";
+  "inline-flex h-12 w-full items-center justify-center border border-line-strong bg-surface px-4 text-[15px] font-semibold text-ink transition hover:bg-bg";
 export const btnDanger =
-  "inline-flex h-12 w-full items-center justify-center rounded-[12px] bg-danger px-4 text-[15px] font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slot-booked disabled:text-muted-2";
+  "inline-flex h-12 w-full items-center justify-center bg-danger px-4 text-[15px] font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slot-booked disabled:text-muted-2";
 export const inputCls =
-  "h-12 w-full rounded-[12px] border border-line-strong bg-surface px-3 text-[15px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "h-12 w-full border border-line-strong bg-surface px-3 text-[15px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 export function TopBar({ title, back }: { title: string; back?: string }) {
   return (
@@ -48,7 +48,7 @@ const toneCls: Record<Tone, string> = {
 
 export function Badge({ tone = "primary", children }: { tone?: Tone; children: ReactNode }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[12px] font-bold ${toneCls[tone]}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 text-[12px] font-bold ${toneCls[tone]}`}>
       {children}
     </span>
   );
@@ -61,7 +61,7 @@ export function Notice({ tone = "warn", children }: { tone?: "warn" | "danger" |
       : tone === "primary"
         ? "bg-primary-soft text-primary-hover"
         : "bg-warn-bg text-warn-ink";
-  return <div className={`rounded-[12px] px-4 py-3 text-[14px] font-medium ${cls}`}>{children}</div>;
+  return <div className={` px-4 py-3 text-[14px] font-medium ${cls}`}>{children}</div>;
 }
 
 export function Row({ label, children }: { label: string; children: ReactNode }) {

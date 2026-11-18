@@ -16,13 +16,13 @@ export function HoldTimer({ expiresAt }: { expiresAt: string }) {
   const ss = String(sec % 60).padStart(2, "0");
   if (sec <= 0) {
     return (
-      <div className="flex items-center gap-2 rounded-[12px] bg-danger-bg px-4 py-3 text-[14px] font-semibold text-danger-ink">
+      <div className="flex items-center gap-2 bg-danger-bg px-4 py-3 text-[14px] font-semibold text-danger-ink">
         <IconClock /> 선점 시간이 지났어요. 시간을 다시 골라 주세요.
       </div>
     );
   }
   return (
-    <div className="flex items-center justify-between rounded-[12px] bg-warn-bg px-4 py-3 text-warn-ink">
+    <div className="flex items-center justify-between bg-warn-bg px-4 py-3 text-warn-ink">
       <span className="flex items-center gap-2 text-[14px] font-semibold">
         <IconClock /> 이 시간을 잠시 잡아 두었어요
       </span>

@@ -6,6 +6,8 @@ import { ko } from "date-fns/locale";
 // 날짜는 KST 기준 "yyyy-MM-dd" 문자열, 하루 중 시각은 자정부터의 분(0~1440)으로 다룬다.
 export const TZ = "Asia/Seoul";
 export const SLOT_MINUTES = 30;
+/** 예약 단위. 저장은 30분 슬롯 행 그대로 두고, 예약 시작·종료는 정시(1시간 경계)만 받는다. */
+export const BOOKING_UNIT_MINUTES = 60;
 const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 
@@ -50,6 +52,11 @@ export function addDays(dateStr: string, days: number): string {
 
 export function isSlotBoundary(minute: number): boolean {
   return Number.isInteger(minute) && minute % SLOT_MINUTES === 0;
+}
+
+/** 예약 시작·종료로 쓸 수 있는 정시인지 */
+export function isBookingBoundary(minute: number): boolean {
+  return Number.isInteger(minute) && minute % BOOKING_UNIT_MINUTES === 0;
 }
 
 /** [start, end) 를 30분 슬롯 시작 시각 목록으로 */

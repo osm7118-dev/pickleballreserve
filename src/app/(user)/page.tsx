@@ -14,7 +14,7 @@ import { IconChevron, IconPin } from "@/components/icons";
 export const dynamic = "force-dynamic";
 
 const bigBtn =
-  "flex h-16 w-full items-center justify-center rounded-[14px] bg-primary text-[17px] font-bold text-white transition hover:bg-primary-hover";
+  "flex h-16 w-full items-center justify-center bg-primary text-[17px] font-bold text-white transition hover:bg-primary-hover";
 
 export default async function HomePage() {
   const store = await cookies();
@@ -40,7 +40,7 @@ export default async function HomePage() {
   return (
     <main className="pb-28">
       <header className="flex items-center gap-3 px-5 pt-7 pb-4">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-primary">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center bg-primary">
           <span className="block h-5 w-5 rounded-full bg-accent" />
         </span>
         <div className="min-w-0">
@@ -68,7 +68,7 @@ export default async function HomePage() {
         ) : (
           <div className="card flex items-center gap-4 p-4">
             <p className="flex-1 text-[15px] text-muted">로그인하면 예약과 레슨을 한 곳에서 관리할 수 있어요.</p>
-            <Link href="/login" className="inline-flex h-11 shrink-0 items-center rounded-[12px] bg-ink px-4 text-[14px] font-bold text-white">
+            <Link href="/login" className="inline-flex h-11 shrink-0 items-center bg-ink px-4 text-[14px] font-bold text-white">
               로그인
             </Link>
           </div>

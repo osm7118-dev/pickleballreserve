@@ -23,7 +23,7 @@
   --color-danger-ink: #8f1d14;
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Noto Sans KR", "Malgun Gothic", sans-serif;
-  --radius-card: 18px;
+  --radius-card: 0px;
 }
 
 html,

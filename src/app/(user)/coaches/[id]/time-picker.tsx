@@ -37,7 +37,7 @@ export function LessonTimePicker({
               disabled={!s.free}
               onClick={() => setSel(s.minute)}
               aria-pressed={sel === s.minute}
-              className={`tabular h-12 rounded-[10px] text-[15px] font-bold ${
+              className={`tabular h-12 text-[15px] font-bold ${
                 sel === s.minute
                   ? "bg-primary text-white"
                   : s.free

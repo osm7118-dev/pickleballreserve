@@ -34,8 +34,8 @@ export const IconChevron = ({ className = "h-5 w-5" }: P) => (
   <svg {...base} className={className}><path d="M9 6l6 6-6 6" /></svg>
 );
 export const IconCalendar = ({ className = "h-5 w-5" }: P) => (
-  <svg {...base} className={className}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
+  <svg {...base} className={className}><rect x="3" y="5" width="18" height="16" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
 );
 export const IconGrid = ({ className = "h-5 w-5" }: P) => (
-  <svg {...base} className={className}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+  <svg {...base} className={className}><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
 );

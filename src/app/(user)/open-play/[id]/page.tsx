@@ -60,7 +60,7 @@ export default async function OpenPlayPage({
               <span className="tabular font-extrabold">{formatWon(session.fee)}</span>
             </Row>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slot-booked" aria-hidden>
+          <div className="mt-3 h-2 overflow-hidden bg-slot-booked" aria-hidden>
             <div className="h-full bg-primary" style={{ width: `${Math.min(100, (joined / session.capacity) * 100)}%` }} />
           </div>
         </div>

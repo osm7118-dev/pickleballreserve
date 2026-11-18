@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 const schema = z.object({
   region: z.string().regex(/^[^|]+\|[^|]+$/),
   date: z.string().refine(isDateStr),
-  start: z.coerce.number().int().min(0).max(1410).multipleOf(30),
-  minutes: z.coerce.number().int().min(30).max(240).multipleOf(30),
+  start: z.coerce.number().int().min(0).max(1380).multipleOf(60),
+  minutes: z.coerce.number().int().min(60).max(240).multipleOf(60),
 });
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {

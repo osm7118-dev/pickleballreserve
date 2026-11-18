@@ -42,13 +42,13 @@ export function PayForm({
       <div className="card p-5">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-[17px] font-bold">결제수단</h3>
-          <span className="rounded-full bg-slot-booked px-2.5 py-0.5 text-[12px] font-bold text-muted">테스트 결제</span>
+          <span className="bg-slot-booked px-2.5 py-0.5 text-[12px] font-bold text-muted">테스트 결제</span>
         </div>
         <div className="space-y-2">
           {METHODS.map((m) => (
             <label
               key={m.value}
-              className={`flex h-14 items-center gap-3 rounded-[12px] border px-4 text-[15px] font-semibold ${
+              className={`flex h-14 items-center gap-3 border px-4 text-[15px] font-semibold ${
                 method === m.value ? "border-primary bg-primary-soft" : "border-line-strong bg-surface"
               }`}
             >
